@@ -228,7 +228,8 @@ Read this before using the plugin with sensitive work.
 - Subscribes to the OpenCode event stream and reacts to `session.execution.succeeded`, `session.execution.failed`, `session.execution.interrupted`, and `session.idle`.
 - Reads `ctx.session.context()` as the source of truth and records only messages whose IDs have not been seen before. Deduplication state is stored via `ctx.storage`.
 - Groups each user prompt with the assistant messages that follow it. A later step of an already recorded turn adds another result file pointing at the original prompt instead of inventing a new prompt.
-- Writes with exclusive creation (`wx`): an existing file is never rewritten, and a colliding number is bumped instead.
+- Writes session records with exclusive creation (`wx`): an existing record is never rewritten, and a colliding number is bumped instead. Derived files (`INDEX.md`, `TRANSCRIPT.md`, configured export) are regenerated from storage state after each session.
+- Rejected permissions are marked `incomplete` / `failed` even when execution reported success.
 - Interrupted and failed executions are written with `status: incomplete` and the matching `outcome`.
 
 ## Compatibility

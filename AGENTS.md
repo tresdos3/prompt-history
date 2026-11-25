@@ -22,12 +22,13 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 ## Architecture / execution flow
 
 - `src/index.ts`: plugin entry. Subscribes to the event stream and filters to `session.execution.succeeded|failed|interrupted` and `session.idle` (`WATCHED_EVENTS`). Events are only triggers; `ctx.session.context()` is the source of truth. With `warnOnCredentialPermission: true`, also handles `permission.asked` / `permission.replied` via `handlePermissionEvent()`.
-- `src/core.ts`: pure helpers (redaction, grouping, status, markdown rendering, credential-permission classification) with no filesystem/OpenCode dependencies — unit tests target this module.
-- `src/store.ts`: filesystem writes and `ctx.storage` state (seen message IDs, session-folder map, last-interaction map). Record writes are exclusive (`wx`); existing files are never overwritten and numbers bump on collision. `appendToArchiveFile()` is used for `SECURITY-WARNINGS.md` (append-only).
+- `src/core.ts`: pure helpers (redaction, grouping, status, markdown rendering, templates, tags, transcripts, export filtering, credential-permission classification) with no filesystem/OpenCode dependencies — unit tests target this module.
+- `src/store.ts`: filesystem writes and `ctx.storage` state (seen IDs, folder map, last interactions, flags, index, export entries, transcripts, tags). Also reads local `.git` metadata with `node:fs` only. Record writes are exclusive (`wx`); existing files are never overwritten and numbers bump on collision. `appendToArchiveFile()` is used for `SECURITY-WARNINGS.md` (append-only).
 - `src/options.ts`: option parsing. Invalid values warn and fall back to defaults rather than throwing.
-- `ctx.storage` keys are namespaced `prompt-archive/*`; dedupe by message ID means state persists across runs, so clearing storage is required to re-record a session.
+- `ctx.storage` keys are namespaced `prompt-archive/*` and optionally prefixed by project (`includeProjectName` → `namespaceStorage()`). Dedupe by message ID means state persists across runs; `force: true` or retention pruning is required to re-record.
 - Subagent sessions follow `parentID` links and share the root session's folder (`resolveRoot`, capped by `maxParentDepth`, default 32).
-- `INDEX.md` is a derived file regenerated from the `prompt-archive/index` storage key after each session. Session records are never overwritten; only derived files (`INDEX.md`, `SECURITY-WARNINGS.md`) are rewritten/appended.
+- Derived files are regenerated after each session from `ctx.storage`: `INDEX.md` (index), `TRANSCRIPT.md` per folder (transcripts), configured export (export entries), and `SECURITY-WARNINGS.md` (append-only). Session records use `wx` and are never overwritten.
+- Retention (`retentionDays` / `maxSessions`) deletes old folders and purges their storage state via `pruneOldSessions()`. Pause (`paused` option or `.paused` sentinel) skips all events before any processing.
 - An assistant-only batch (no captured user prompt) is labeled with an `orphan:` pseudo-ID and written as a continuation result pointing at the previous prompt, not a new prompt file.
 
 ## Gotchas enforced by runtime behavior (do not "fix" without testing)
@@ -40,7 +41,9 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 - Redact **before** truncating (`truncateText()` after `redactSecrets()`): cutting a secret in half could defeat a pattern. `maxTextChars` defaults to 100,000.
 - Credential-request warnings are opt-in (`warnOnCredentialPermission`, default false) and heuristic. Never write raw secret values into `SECURITY-WARNINGS.md`; the event does not carry them and `renderWarningEntry()` re-redacts. Warnings cannot detect pre-authorized reads.
 - File numbering is global serial work: keep updates going through the `enqueue()` promise chain in `index.ts`, otherwise two events can allocate the same number.
-- Record writes use `wx`, never overwrite. Changing this breaks the "never overwrites" guarantee and the tests. `SECURITY-WARNINGS.md` is the intentional exception: append-only via `appendToArchiveFile()`.
+- Record writes use `wx`, never overwrite. Changing this breaks the "never overwrites" guarantee and the tests. Derived files (`INDEX.md`, `TRANSCRIPT.md`, exports) are intentionally regenerated; `SECURITY-WARNINGS.md` is append-only via `appendToArchiveFile()`.
+- Git metadata comes from `.git/HEAD`, loose refs, and `packed-refs` via `node:fs` — never run `git` or any child process. Worktrees/submodules with a `gitdir:` pointer must keep working.
+- Custom templates replace only the Markdown body; frontmatter is always generated. Redact the final rendered body, not just the source values. `dryRun` must suppress all writes including pruning, tags, transcripts, and export.
 
 ## Verification / release notes
 

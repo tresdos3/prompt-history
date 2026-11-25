@@ -4,13 +4,14 @@ This plugin writes a **plaintext transcript** of your OpenCode sessions to disk.
 
 ## What is protected
 
-- **Redaction before disk.** Prompt text, assistant responses, reasoning (when enabled), and generated filenames all pass through pattern-based redaction. Recognized credential formats are replaced with `[REDACTED]` before anything is written.
+- **Redaction before disk.** Prompt text, assistant responses, reasoning (when enabled), generated filenames, tags, templates, transcripts, and consolidated exports all pass through pattern-based redaction. Recognized credential formats are replaced with `[REDACTED]` before anything is written.
 - **Recognized formats include:** API keys, bearer tokens, provider token prefixes (OpenAI, Anthropic, Stripe, GitHub, Slack, AWS, Google), raw JWTs, SSH key blobs, private-key blocks, URL userinfo (`scheme://user:password@host`), and `key=value` / JSON assignments — including compound names such as `MY_API_KEY=` and `SECRET_TOKEN=`.
 - **Credential-bearing paths are excluded** from `changed_files` (`.env`, `.aws/`, `.ssh/`, `credentials`, `secrets`, `.pem`/`.key`, etc.).
 - **Optional retention pruning.** `retentionDays` / `maxSessions` permanently delete old session folders and their stored state. Use with care; deleted archives are not recoverable.
 - **Bounded file sizes.** `maxTextChars` (default 100,000) caps prompt/response bodies with a visible truncation marker, so a single oversized output cannot create an arbitrarily large archive file.
 - **Git metadata is read-only.** The plugin reads `.git/HEAD`, refs, and `packed-refs` directly with `node:fs` — it never runs `git` or any child process. Branch and commit hashes are stored in result frontmatter; no file contents are read.
 - **No external side effects.** The plugin does not read `.env` files, spawn processes, or modify source files. Writes are exclusive (`wx`) so existing records are never overwritten.
+- **Pause support.** Set `paused: true` or create a `.paused` file in the archive root to stop all recording, including credential warnings, without uninstalling the plugin.
 - **Opt-in credential-request warnings.** With `warnOnCredentialPermission: true`, permission requests that look credential-related produce a stderr warning and an entry in `SECURITY-WARNINGS.md`. Warning text is passed through the same redaction.
 
 ## What is NOT protected
@@ -18,7 +19,8 @@ This plugin writes a **plaintext transcript** of your OpenCode sessions to disk.
 - **Redaction is pattern-based and incomplete.** It cannot catch every secret format. Novel token shapes, secrets split across messages, or credentials described in prose may still be written. **Do not paste real credentials into a prompt.**
 - **No PII detection.** Phone numbers, SSNs, credit-card numbers, and email addresses are not redacted.
 - **Warnings are heuristic.** Credential-request detection inspects only the action string, resource paths, and message of a permission event. It never sees secret values, cannot detect reads the agent is already authorized to make, and may produce false positives or miss unusual phrasings. It is a notification aid, not an access control.
-- **Archives are plaintext.** Anyone with filesystem access to the configured directory can read the full transcript. Protect that directory accordingly and consider adding it to `.gitignore` if you do not want it committed.
+- **Archives are plaintext.** Anyone with filesystem access to the configured directory can read the full transcript (`INDEX.md`, `TRANSCRIPT.md`, exports, and session files). Protect that directory accordingly and consider adding it to `.gitignore` if you do not want it committed.
+- **Project names may appear in paths.** With `includeProjectName: true`, the sanitized project directory name becomes part of the archive path.
 
 ## Recommended use
 
