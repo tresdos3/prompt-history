@@ -13,6 +13,7 @@ import {
   type ExportEntry,
   renderPromptFile,
   renderResultFile,
+  renderTranscript,
   renderWarningEntry,
   slugify,
   truncateText,
@@ -214,6 +215,31 @@ test("a rejected permission marks an otherwise successful turn as failed", () =>
     status: "complete",
     outcome: "succeeded",
   })
+})
+
+test("transcripts order turns chronologically and redact secrets", () => {
+  const rendered = renderTranscript([
+    {
+      timestamp: 2,
+      agent: "build",
+      promptText: "Second prompt",
+      responseText: "TOKEN=sk-fake1234567890",
+      status: "complete",
+      outcome: "succeeded",
+    },
+    {
+      timestamp: 1,
+      agent: "explore",
+      promptText: "First prompt",
+      responseText: "Found it.",
+      status: "complete",
+      outcome: "succeeded",
+    },
+  ])
+  assert.match(rendered, /# Session transcript/)
+  assert.ok(rendered.indexOf("First prompt") < rendered.indexOf("Second prompt"))
+  assert.match(rendered, /\[REDACTED\]/)
+  assert.doesNotMatch(rendered, /sk-fake1234567890/)
 })
 
 test("templates substitute placeholders and redact the final body", () => {

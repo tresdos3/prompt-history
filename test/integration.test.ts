@@ -59,7 +59,9 @@ test("event pipeline writes a prompt/result pair in a numbered session folder", 
     const folders = await sessionFolders(base)
     assert.equal(folders.length, 1)
     assert.match(folders[0], /^0001-/)
-    const files = (await readdir(path.join(base, folders[0]))).sort()
+    const files = (await readdir(path.join(base, folders[0])))
+      .filter((f) => f.endsWith("-prompt.md") || f.endsWith("-result.md"))
+      .sort()
     assert.deepEqual(files, ["01-add-login-form-prompt.md", "02-build-result.md"])
     const prompt = await readFile(path.join(base, folders[0], files[0]), "utf8")
     assert.match(prompt, /interaction: "ses_1::msg_1"/)
@@ -85,7 +87,7 @@ test("a second event for the same session does not duplicate recorded messages",
     const folders = await sessionFolders(base)
     assert.equal(folders.length, 1)
     const files = await readdir(path.join(base, folders[0]))
-    assert.equal(files.length, 2)
+    assert.equal(files.filter((f) => f.endsWith("-prompt.md") || f.endsWith("-result.md")).length, 2)
   } finally {
     await rm(base, { recursive: true, force: true })
   }
@@ -129,6 +131,23 @@ test("INDEX.md links the recorded session and its files", async () => {
     assert.match(index, /add-login-form/)
     assert.match(index, /01-add-login-form-prompt\.md/)
     assert.match(index, /02-build-result\.md/)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("TRANSCRIPT.md is written in each session folder", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
+  try {
+    const { ctx } = fakeCtx({
+      messages: [msg("msg_1", { text: "Add login form" }), msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Done." }] })],
+    })
+    await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
+    const folders = await sessionFolders(base)
+    const transcript = await readFile(path.join(base, folders[0], "TRANSCRIPT.md"), "utf8")
+    assert.match(transcript, /# Session transcript/)
+    assert.match(transcript, /Add login form/)
+    assert.match(transcript, /Done\./)
   } finally {
     await rm(base, { recursive: true, force: true })
   }

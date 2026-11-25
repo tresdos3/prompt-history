@@ -24,6 +24,8 @@ test("options accept valid overrides", () => {
     export: { format: "jsonl", outFile: "all.jsonl", agent: "build", status: "complete" },
     promptTemplate: "# {{title}}\n{{body}}",
     resultTemplate: "{{agent}}: {{body}}",
+    includeTranscript: false,
+    transcriptName: "TALK.md",
   })
   assert.equal(parsed.directory, "/tmp/archive")
   assert.equal(parsed.includeReasoning, true)
@@ -40,6 +42,8 @@ test("options accept valid overrides", () => {
   assert.deepEqual(parsed.export, { format: "jsonl", outFile: "all.jsonl", agent: "build", status: "complete" })
   assert.equal(parsed.promptTemplate, "# {{title}}\n{{body}}")
   assert.equal(parsed.resultTemplate, "{{agent}}: {{body}}")
+  assert.equal(parsed.includeTranscript, false)
+  assert.equal(parsed.transcriptName, "TALK.md")
 })
 
 test("invalid options fall back to defaults", () => {

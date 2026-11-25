@@ -8,7 +8,7 @@
 import { appendFile, mkdir, open, readFile, readdir, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { Plugin } from "@opencode/plugin"
-import type { ExportEntry } from "./core.ts"
+import type { ExportEntry, TranscriptEntry } from "./core.ts"
 
 type Ctx = Plugin.Context
 
@@ -18,6 +18,7 @@ const LAST_KEY = "prompt-archive/last-interactions"
 const FLAGS_KEY = "prompt-archive/session-flags"
 const INDEX_KEY = "prompt-archive/index"
 const EXPORT_KEY = "prompt-archive/export-entries"
+const TRANSCRIPT_KEY = "prompt-archive/transcripts"
 
 export interface LastInteraction {
   interactionID: string
@@ -130,6 +131,26 @@ export async function getIndex(ctx: Ctx): Promise<Record<string, IndexEntry>> {
     }
   }
   return result
+}
+
+export async function getTranscripts(ctx: Ctx): Promise<Record<string, TranscriptEntry[]>> {
+  const raw = await ctx.storage.get(TRANSCRIPT_KEY)
+  let value: unknown = raw
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      return {}
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  return value as Record<string, TranscriptEntry[]>
+}
+
+export async function addTranscriptEntries(ctx: Ctx, folder: string, entries: ReadonlyArray<TranscriptEntry>): Promise<void> {
+  const all = await getTranscripts(ctx)
+  all[folder] = [...(all[folder] ?? []), ...entries]
+  await ctx.storage.set(TRANSCRIPT_KEY, JSON.stringify(all))
 }
 
 export async function getExportEntries(ctx: Ctx): Promise<ExportEntry[]> {

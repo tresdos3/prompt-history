@@ -64,15 +64,19 @@ docs/prompt-history/
   0001-initial-architecture/
     01-plan-prompt.md
     02-build-result.md
+    TRANSCRIPT.md
   0002-add-login/
     01-add-login-prompt.md
     02-build-result.md
+    TRANSCRIPT.md
+  INDEX.md
 ```
 
 - Folder names are `NNNN-<session-title>`, numbered in order.
 - File names are `NN-<prompt-slug>-prompt.md` and `NN-<agent>-result.md`.
 - Subagent sessions share the root session's folder.
 - Result frontmatter includes `git_branch` / `git_commit` when a local `.git` directory is found; `INDEX.md` shows the branch per session.
+- Each session folder contains a `TRANSCRIPT.md` that reads the whole turn chronologically; disable with `includeTranscript: false`.
 - Prompt and result files share the same `interaction` frontmatter value:
   `"<sessionID>::<userMessageID>"`.
 
@@ -130,7 +134,9 @@ Pass options in `opencode.json(c)`:
           "text": "login"
         },
         "promptTemplate": "# {{title}}\n\n{{body}}",
-        "resultTemplate": "{{agent}} — {{outcome}}\n\n{{body}}"
+        "resultTemplate": "{{agent}} — {{outcome}}\n\n{{body}}",
+        "includeTranscript": true,
+        "transcriptName": "TRANSCRIPT.md"
       }
     }
   ]
@@ -154,6 +160,8 @@ Pass options in `opencode.json(c)`:
 | `export` | object | unset | Generate a consolidated, searchable export file. See below. |
 | `promptTemplate` | string | unset | Custom Markdown body for prompt files. See below. |
 | `resultTemplate` | string | unset | Custom Markdown body for result files. See below. |
+| `includeTranscript` | boolean | `true` | Write a chronological `TRANSCRIPT.md` in each session folder. |
+| `transcriptName` | string | `TRANSCRIPT.md` | Override the transcript filename. |
 
 ### Custom templates
 

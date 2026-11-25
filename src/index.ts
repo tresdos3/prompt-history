@@ -21,8 +21,10 @@ import {
   renderIndex,
   renderPromptFile,
   renderResultFile,
+  renderTranscript,
   renderWarningEntry,
   type ExportEntry,
+  type TranscriptEntry,
   slugify,
   type HistoryMessage,
   type InteractionStatus,
@@ -31,6 +33,7 @@ import {
 import { parseOptions, resolveDirectory, type ArchiveOptions } from "./options.ts"
 import {
   addExportEntries,
+  addTranscriptEntries,
   appendToArchiveFile,
   clearSessionFlag,
   createSessionFolder,
@@ -40,6 +43,7 @@ import {
   getLastInteractions,
   getSeen,
   getSessionFlags,
+  getTranscripts,
   highestNumber,
   readDirNames,
   readGitMetadata,
@@ -346,7 +350,22 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
     await writeArchiveFile(root, "INDEX.md", renderIndex(await getIndex(ctx)))
   }
 
-  if (exportEntries.length > 0) await addExportEntries(ctx, exportEntries)
+  if (exportEntries.length > 0) {
+    await addExportEntries(ctx, exportEntries)
+    if (options.includeTranscript) {
+      const turns: TranscriptEntry[] = exportEntries.map((entry) => ({
+        timestamp: entry.timestamp,
+        agent: entry.agent,
+        promptText: entry.promptText,
+        responseText: entry.responseText,
+        status: entry.status,
+        outcome: entry.outcome,
+      }))
+      await addTranscriptEntries(ctx, folder.name, turns)
+      const all = (await getTranscripts(ctx))[folder.name] ?? []
+      await writeArchiveFile(folder.path, options.transcriptName, renderTranscript(all))
+    }
+  }
   await regenerateExport(ctx, root, options)
 }
 

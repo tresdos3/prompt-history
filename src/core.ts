@@ -339,6 +339,29 @@ export function renderResultFile(input: ResultFileInput): string {
   return `${frontmatter(fields)}\n${redactSecrets(content)}\n`
 }
 
+/** One turn in a session transcript. */
+export interface TranscriptEntry {
+  timestamp: number
+  agent: string
+  promptText: string
+  responseText: string
+  status: InteractionStatus
+  outcome: Outcome
+}
+
+/** Render a chronological prompt → response transcript. All output is redacted. */
+export function renderTranscript(entries: ReadonlyArray<TranscriptEntry>): string {
+  const lines = ["# Session transcript", ""]
+  const sorted = [...entries].sort((a, b) => a.timestamp - b.timestamp)
+  for (const entry of sorted) {
+    lines.push(`## ${toIso(entry.timestamp)} — ${redactSecrets(entry.agent)}`, "")
+    lines.push("### Prompt", "", redactSecrets(entry.promptText) || "_No prompt recorded._", "")
+    lines.push("### Response", "", redactSecrets(entry.responseText) || "_No response recorded._", "")
+    lines.push(`_Status: ${entry.status} (${entry.outcome})_`, "")
+  }
+  return `${lines.join("\n").trimEnd()}\n`
+}
+
 /** One archived interaction, stored for consolidated export. */
 export interface ExportEntry {
   interactionID: string

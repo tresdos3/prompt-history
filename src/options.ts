@@ -42,6 +42,10 @@ export interface ArchiveOptions {
   promptTemplate?: string
   /** Optional custom Markdown body template for result files. */
   resultTemplate?: string
+  /** Write a chronological TRANSCRIPT.md in each session folder. */
+  includeTranscript: boolean
+  /** Override the transcript filename. */
+  transcriptName: string
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -57,6 +61,8 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   datePrefix: false,
   maxParentDepth: 32,
   dryRun: false,
+  includeTranscript: true,
+  transcriptName: "TRANSCRIPT.md",
 }
 
 /** Parse the optional export configuration. Invalid values are ignored with a warning. */
@@ -126,6 +132,17 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     options.maxParentDepth = Math.max(0, Math.trunc(input.maxParentDepth))
   } else if (input.maxParentDepth !== undefined) {
     warnings.push("maxParentDepth must be a finite number")
+  }
+
+  for (const key of ["includeTranscript"] as const) {
+    const value = input[key]
+    if (typeof value === "boolean") options[key] = value
+    else if (value !== undefined) warnings.push(`${key} must be a boolean`)
+  }
+  if (typeof input.transcriptName === "string" && input.transcriptName.trim()) {
+    options.transcriptName = input.transcriptName.trim()
+  } else if (input.transcriptName !== undefined) {
+    warnings.push("transcriptName must be a non-empty string")
   }
 
   for (const key of ["promptTemplate", "resultTemplate"] as const) {
