@@ -131,7 +131,9 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
   const written: string[] = []
   const flags = (await getSessionFlags(ctx))[sessionID] ?? {}
   const { status, outcome } = deriveStatus(messages, hint, flags.permissionRejected === true)
-  if (flags.permissionRejected) await clearSessionFlag(ctx, sessionID, "permissionRejected")
+  if (flags.permissionRejected && !options.dryRun) {
+    await clearSessionFlag(ctx, sessionID, "permissionRejected")
+  }
   const securityWarning = flags.securityWarning === true
   const interactions = groupInteractions(fresh)
   const lastInteractions = await getLastInteractions(ctx)
