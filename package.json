@@ -1,0 +1,37 @@
+{
+  "name": "opencode-prompt-archive",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that records prompts and assistant responses as Markdown.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "prompt",
+    "history",
+    "transcript",
+    "markdown"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test *.test.ts test/*.test.ts",
+    "test:root": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "pack:check": "pnpm pack --pack-destination /private/var/folders/cv/z4kr2kj95jgb41tjvgrpy10w0000gp/T/opencode"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "2.4.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}
