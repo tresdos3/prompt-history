@@ -14,6 +14,7 @@ import {
   deriveStatus,
   groupInteractions,
   redactSecrets,
+  renderIndex,
   renderPromptFile,
   renderResultFile,
   renderWarningEntry,
@@ -27,15 +28,18 @@ import {
   clearSessionFlag,
   createSessionFolder,
   getFolderMap,
+  getIndex,
   getLastInteractions,
   getSeen,
   getSessionFlags,
   highestNumber,
   readDirNames,
   setFolderMap,
+  setIndexEntry,
   setLastInteractions,
   setSessionFlags,
   setSeen,
+  writeArchiveFile,
   writeNumbered,
   type LastInteraction,
 } from "./store.ts"
@@ -80,10 +84,14 @@ function outcomeFor(eventType: string): Outcome {
 }
 
 /** Follow parentID links so subagent sessions share their root session's folder. */
-async function resolveRoot(ctx: Ctx, session: SessionLike): Promise<SessionLike> {
+async function resolveRoot(
+  ctx: Ctx,
+  session: SessionLike,
+  maxDepth: number,
+): Promise<SessionLike> {
   let current = session
   const visited = new Set<string>([current.id])
-  for (let depth = 0; depth < 16 && current.parentID; depth += 1) {
+  for (let depth = 0; depth < maxDepth && current.parentID; depth += 1) {
     if (visited.has(current.parentID)) break
     visited.add(current.parentID)
     try {
@@ -100,13 +108,16 @@ async function ensureFolder(
   root: string,
   rootSession: SessionLike,
   firstPrompt: string,
+  options: ArchiveOptions,
 ): Promise<{ name: string; path: string }> {
   const folders = await getFolderMap(ctx)
   const existing = folders[rootSession.id]
   if (existing) return { name: existing, path: path.join(root, existing) }
 
   const seed = rootSession.title || firstPrompt || rootSession.id
-  const folder = await createSessionFolder(root, slugify(redactSecrets(seed), 8, 64))
+  const date = new Date().toISOString().slice(0, 10)
+  const datePrefix = options.datePrefix ? `${date}-` : ""
+  const folder = await createSessionFolder(root, slugify(redactSecrets(seed), 8, 64), datePrefix)
   folders[rootSession.id] = folder.name
   await setFolderMap(ctx, folders)
   return folder
@@ -123,12 +134,14 @@ export async function processSession(
   const session = (await ctx.session.get({ sessionID })) as unknown as SessionLike
   const messages = (await ctx.session.context({ sessionID })) as unknown as HistoryMessage[]
   const seen = new Set(await getSeen(ctx))
+  if (options.force) for (const message of messages) seen.delete(message.id)
   const fresh = collectNewMessages(messages, seen)
   if (fresh.length === 0) return
 
-  const rootSession = await resolveRoot(ctx, session)
+  const rootSession = await resolveRoot(ctx, session, options.maxParentDepth)
   const firstPrompt = fresh.find((m) => m.type === "user")?.text ?? ""
-  const folder = await ensureFolder(ctx, root, rootSession, firstPrompt)
+  const folder = await ensureFolder(ctx, root, rootSession, firstPrompt, options)
+  const written: string[] = []
   const flags = (await getSessionFlags(ctx))[sessionID] ?? {}
   const { status, outcome } = deriveStatus(messages, hint, flags.permissionRejected === true)
   if (flags.permissionRejected) await clearSessionFlag(ctx, sessionID, "permissionRejected")
@@ -150,7 +163,7 @@ export async function processSession(
       // points at the original prompt instead of inventing a new prompt.
       const interactionID =
         previous?.interactionID ?? (lastUser ? `${sessionID}::${lastUser.id}` : `${sessionID}::unknown`)
-      await writeNumbered(
+      const resultFile = await writeNumbered(
         folder.path,
         number,
         `${slugify(agent, 4, 32)}-result`,
@@ -172,6 +185,7 @@ export async function processSession(
           securityWarning,
         }),
       )
+      written.push(resultFile)
       number += 1
       for (const message of interaction.responses) seen.add(message.id)
       await setSeen(ctx, [...seen])
@@ -197,9 +211,10 @@ export async function processSession(
         maxTextChars: options.maxTextChars,
       }),
     )
+    written.push(promptFile)
     number += 1
 
-    await writeNumbered(
+    const resultFile = await writeNumbered(
       folder.path,
       number,
       `${slugify(agent, 4, 32)}-result`,
@@ -221,6 +236,7 @@ export async function processSession(
         securityWarning,
       }),
     )
+    written.push(resultFile)
     number += 1
 
     const record: LastInteraction = { interactionID, promptFile, agent, title }
@@ -231,6 +247,21 @@ export async function processSession(
     for (const message of [interaction.prompt, ...interaction.responses]) seen.add(message.id)
     await setSeen(ctx, [...seen])
   }
+
+  if (written.length > 0) {
+    const date = new Date(firstPromptTime(messages)).toISOString().slice(0, 10)
+    await setIndexEntry(ctx, folder.name, {
+      title: folder.name.replace(/^(?:\d{4}-\d{2}-\d{2}-)?\d{4}-/, ""),
+      date,
+      files: written,
+    })
+    await writeArchiveFile(root, "INDEX.md", renderIndex(await getIndex(ctx)))
+  }
+}
+
+/** First prompt timestamp, falling back to the current time. */
+function firstPromptTime(messages: ReadonlyArray<HistoryMessage>): number {
+  return messages.find((m) => m.type === "user")?.time?.created ?? Date.now()
 }
 
 /** Pending permission requests, with a TTL and cap so entries cannot accumulate forever. */

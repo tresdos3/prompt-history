@@ -17,6 +17,12 @@ export interface ArchiveOptions {
   verbose: boolean
   /** Warn (stderr + archive) when a permission request looks credential-related. */
   warnOnCredentialPermission: boolean
+  /** Re-record messages even if their IDs were already seen. */
+  force: boolean
+  /** Prefix new session folders with YYYY-MM-DD for chronological sorting. */
+  datePrefix: boolean
+  /** Maximum parentID hops when resolving a subagent's root session. */
+  maxParentDepth: number
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -28,6 +34,9 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   maxTextChars: 100_000,
   verbose: false,
   warnOnCredentialPermission: false,
+  force: false,
+  datePrefix: false,
+  maxParentDepth: 32,
 }
 
 export function parseOptions(raw: unknown): ArchiveOptions {
@@ -42,7 +51,7 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     warnings.push("directory must be a non-empty string")
   }
 
-  for (const key of ["includeReasoning", "includeTools", "includeChangedFiles", "verbose", "warnOnCredentialPermission"] as const) {
+  for (const key of ["includeReasoning", "includeTools", "includeChangedFiles", "verbose", "warnOnCredentialPermission", "force", "datePrefix"] as const) {
     const value = input[key]
     if (typeof value === "boolean") options[key] = value
     else if (value !== undefined) warnings.push(`${key} must be a boolean`)
@@ -58,6 +67,12 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     options.maxTextChars = Math.max(0, Math.trunc(input.maxTextChars))
   } else if (input.maxTextChars !== undefined) {
     warnings.push("maxTextChars must be a finite number")
+  }
+
+  if (typeof input.maxParentDepth === "number" && Number.isFinite(input.maxParentDepth)) {
+    options.maxParentDepth = Math.max(0, Math.trunc(input.maxParentDepth))
+  } else if (input.maxParentDepth !== undefined) {
+    warnings.push("maxParentDepth must be a finite number")
   }
 
   if (warnings.length > 0) {

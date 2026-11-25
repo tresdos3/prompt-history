@@ -17,6 +17,9 @@ test("options accept valid overrides", () => {
     maxTextChars: 1234,
     verbose: true,
     warnOnCredentialPermission: true,
+    force: true,
+    datePrefix: true,
+    maxParentDepth: 8,
   })
   assert.equal(parsed.directory, "/tmp/archive")
   assert.equal(parsed.includeReasoning, true)
@@ -26,6 +29,9 @@ test("options accept valid overrides", () => {
   assert.equal(parsed.maxTextChars, 1234)
   assert.equal(parsed.verbose, true)
   assert.equal(parsed.warnOnCredentialPermission, true)
+  assert.equal(parsed.force, true)
+  assert.equal(parsed.datePrefix, true)
+  assert.equal(parsed.maxParentDepth, 8)
 })
 
 test("invalid options fall back to defaults", () => {

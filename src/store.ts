@@ -5,7 +5,7 @@
  * overwritten. No child processes are spawned by this plugin.
  */
 
-import { appendFile, mkdir, open, readdir } from "node:fs/promises"
+import { appendFile, mkdir, open, readdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { Plugin } from "@opencode/plugin"
 
@@ -15,6 +15,7 @@ const SEEN_KEY = "prompt-archive/seen-message-ids"
 const FOLDERS_KEY = "prompt-archive/session-folders"
 const LAST_KEY = "prompt-archive/last-interactions"
 const FLAGS_KEY = "prompt-archive/session-flags"
+const INDEX_KEY = "prompt-archive/index"
 
 export interface LastInteraction {
   interactionID: string
@@ -27,6 +28,59 @@ export interface LastInteraction {
 export interface SessionFlags {
   securityWarning?: boolean
   permissionRejected?: boolean
+}
+
+/** One row in the generated INDEX.md. */
+export interface IndexEntry {
+  title: string
+  date: string
+  files: string[]
+}
+
+export async function getIndex(ctx: Ctx): Promise<Record<string, IndexEntry>> {
+  const raw = await ctx.storage.get(INDEX_KEY)
+  let value: unknown = raw
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      return {}
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const result: Record<string, IndexEntry> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue
+    const record = entry as Record<string, unknown>
+    if (
+      typeof record.title === "string" &&
+      typeof record.date === "string" &&
+      Array.isArray(record.files) &&
+      record.files.every((f) => typeof f === "string")
+    ) {
+      result[key] = {
+        title: record.title,
+        date: record.date,
+        files: record.files as string[],
+      }
+    }
+  }
+  return result
+}
+
+export async function setIndexEntry(
+  ctx: Ctx,
+  folder: string,
+  entry: IndexEntry,
+): Promise<void> {
+  const all = await getIndex(ctx)
+  const previous = all[folder]
+  all[folder] = {
+    title: entry.title || previous?.title || folder,
+    date: entry.date || previous?.date || "",
+    files: [...new Set([...(previous?.files ?? []), ...entry.files])],
+  }
+  await ctx.storage.set(INDEX_KEY, JSON.stringify(all))
 }
 
 export async function getSessionFlags(ctx: Ctx): Promise<Record<string, SessionFlags>> {
@@ -166,12 +220,13 @@ export function highestNumber(names: ReadonlyArray<string>, pattern: RegExp): nu
 export async function createSessionFolder(
   root: string,
   titleSlug: string,
+  datePrefix = "",
 ): Promise<{ name: string; path: string }> {
   await mkdir(root, { recursive: true })
   const names = await readDirNames(root)
-  let number = highestNumber(names, /^(\d{4})-/i) + 1
+  let number = highestNumber(names, /^(?:\d{4}-\d{2}-\d{2}-)?(\d{4})-/i) + 1
   while (true) {
-    const name = `${String(number).padStart(4, "0")}-${titleSlug}`
+    const name = `${datePrefix}${String(number).padStart(4, "0")}-${titleSlug}`
     try {
       await mkdir(path.join(root, name))
       return { name, path: path.join(root, name) }
@@ -189,6 +244,12 @@ export async function createSessionFolder(
 export async function appendToArchiveFile(root: string, filename: string, content: string): Promise<void> {
   await mkdir(root, { recursive: true })
   await appendFile(path.join(root, filename), content, "utf8")
+}
+
+/** Regenerate a derived file such as INDEX.md. Records themselves are never overwritten. */
+export async function writeArchiveFile(root: string, filename: string, content: string): Promise<void> {
+  await mkdir(root, { recursive: true })
+  await writeFile(path.join(root, filename), content, "utf8")
 }
 
 /** Write a numbered Markdown file exclusively; bump the number on collision. */

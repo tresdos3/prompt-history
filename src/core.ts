@@ -326,6 +326,26 @@ export function renderResultFile(input: ResultFileInput): string {
   return `${frontmatter(fields)}\n${body.join("\n")}\n`
 }
 
+/** Render the archive root INDEX.md from persisted session entries. */
+export function renderIndex(
+  entries: Readonly<Record<string, { title: string; date: string; files: ReadonlyArray<string> }>>,
+): string {
+  const lines = ["# Prompt archive index", ""]
+  const folders = Object.keys(entries).sort()
+  if (folders.length === 0) lines.push("_No sessions recorded yet._")
+  for (const folder of folders) {
+    const entry = entries[folder]
+    lines.push(`## ${entry.title || folder}`, "")
+    if (entry.date) lines.push(`- Date: ${entry.date}`)
+    lines.push(`- Folder: [${folder}](./${folder}/)`)
+    for (const file of entry.files) {
+      lines.push(`- [${file}](./${folder}/${file})`)
+    }
+    lines.push("")
+  }
+  return `${lines.join("\n").trimEnd()}\n`
+}
+
 /* -------------------------------------------------------------------------- */
 /* Credential-permission warnings                                             */
 /* -------------------------------------------------------------------------- */

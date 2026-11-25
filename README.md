@@ -113,7 +113,10 @@ Pass options in `opencode.json(c)`:
         "maxChangedFiles": 200,
         "maxTextChars": 100000,
         "verbose": false,
-        "warnOnCredentialPermission": false
+        "warnOnCredentialPermission": false,
+        "force": false,
+        "datePrefix": false,
+        "maxParentDepth": 32
       }
     }
   ]
@@ -130,6 +133,11 @@ Pass options in `opencode.json(c)`:
 | `maxTextChars` | number | `100000` | Maximum characters per prompt/response body. Longer bodies are truncated with a visible marker. Set `0` to allow only the marker. |
 | `verbose` | boolean | `false` | Log the output directory once at plugin load. |
 | `warnOnCredentialPermission` | boolean | `false` | Warn (stderr + `SECURITY-WARNINGS.md` in the archive) when a permission request looks credential-related. See below. |
+| `force` | boolean | `false` | Re-record messages even if their IDs were already seen. Useful after deleting an archive file. |
+| `datePrefix` | boolean | `false` | Name new session folders `YYYY-MM-DD-NNNN-<title>` for chronological sorting. |
+| `maxParentDepth` | number | `32` | Maximum `parentID` hops when resolving a subagent's root session. |
+
+An `INDEX.md` in the archive root lists every recorded session with links to its prompt and result files. It is regenerated after each session; session records themselves are never overwritten.
 
 Invalid option values fall back to the defaults with a warning; they never stop recording.
 

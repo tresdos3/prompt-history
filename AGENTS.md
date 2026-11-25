@@ -25,7 +25,8 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 - `src/store.ts`: filesystem writes and `ctx.storage` state (seen message IDs, session-folder map, last-interaction map). Record writes are exclusive (`wx`); existing files are never overwritten and numbers bump on collision. `appendToArchiveFile()` is used for `SECURITY-WARNINGS.md` (append-only).
 - `src/options.ts`: option parsing. Invalid values warn and fall back to defaults rather than throwing.
 - `ctx.storage` keys are namespaced `prompt-archive/*`; dedupe by message ID means state persists across runs, so clearing storage is required to re-record a session.
-- Subagent sessions follow `parentID` links and share the root session's folder (`resolveRoot`).
+- Subagent sessions follow `parentID` links and share the root session's folder (`resolveRoot`, capped by `maxParentDepth`, default 32).
+- `INDEX.md` is a derived file regenerated from the `prompt-archive/index` storage key after each session. Session records are never overwritten; only derived files (`INDEX.md`, `SECURITY-WARNINGS.md`) are rewritten/appended.
 - An assistant-only batch (no captured user prompt) is labeled with an `orphan:` pseudo-ID and written as a continuation result pointing at the previous prompt, not a new prompt file.
 
 ## Gotchas enforced by runtime behavior (do not "fix" without testing)

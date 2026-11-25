@@ -6,6 +6,9 @@ import {
   appendToArchiveFile,
   clearSessionFlag,
   createSessionFolder,
+  getIndex,
+  setIndexEntry,
+  writeArchiveFile,
   getSessionFlags,
   highestNumber,
   readDirNames,
@@ -96,6 +99,35 @@ test("session flags persist, merge, and can be cleared", async () => {
   assert.deepEqual(await getSessionFlags(ctx), { ses_1: { securityWarning: true } })
   await clearSessionFlag(ctx, "ses_1", "securityWarning")
   assert.deepEqual(await getSessionFlags(ctx), {})
+})
+
+test("date-prefixed folders do not break numbering", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-store-"))
+  try {
+    const root = path.join(base, "archive")
+    await createSessionFolder(root, "first", "2026-11-25-")
+    const second = await createSessionFolder(root, "second", "2026-11-25-")
+    assert.equal(second.name, "2026-11-25-0002-second")
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("index entries merge files and writeArchiveFile regenerates content", async () => {
+  const { ctx } = storageCtx()
+  await setIndexEntry(ctx, "0001-one", { title: "One", date: "2026-11-25", files: ["01-a.md"] })
+  await setIndexEntry(ctx, "0001-one", { title: "", date: "", files: ["02-b.md"] })
+  assert.deepEqual(await getIndex(ctx), {
+    "0001-one": { title: "One", date: "2026-11-25", files: ["01-a.md", "02-b.md"] },
+  })
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-store-"))
+  try {
+    await writeArchiveFile(base, "INDEX.md", "v1\n")
+    await writeArchiveFile(base, "INDEX.md", "v2\n")
+    assert.equal(await readFile(path.join(base, "INDEX.md"), "utf8"), "v2\n")
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
 })
 
 test("malformed stored flags are ignored", async () => {

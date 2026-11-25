@@ -36,6 +36,11 @@ function msg(id: string, overrides: Partial<HistoryMessage> = {}): HistoryMessag
   return { id, type: "user", time: { created: 1 }, ...overrides }
 }
 
+/** Session folders only — the archive root also holds INDEX.md. */
+async function sessionFolders(root: string): Promise<string[]> {
+  return (await readdir(root)).filter((name) => /^\d/.test(name))
+}
+
 test("event pipeline writes a prompt/result pair in a numbered session folder", async () => {
   const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
   try {
@@ -46,7 +51,7 @@ test("event pipeline writes a prompt/result pair in a numbered session folder", 
       ],
     })
     await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
-    const folders = await readdir(base)
+    const folders = await sessionFolders(base)
     assert.equal(folders.length, 1)
     assert.match(folders[0], /^0001-/)
     const files = (await readdir(path.join(base, folders[0]))).sort()
@@ -72,10 +77,57 @@ test("a second event for the same session does not duplicate recorded messages",
     const { ctx } = fakeCtx({ messages })
     await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
     await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
-    const folders = await readdir(base)
+    const folders = await sessionFolders(base)
     assert.equal(folders.length, 1)
     const files = await readdir(path.join(base, folders[0]))
     assert.equal(files.length, 2)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("INDEX.md links the recorded session and its files", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
+  try {
+    const { ctx } = fakeCtx({
+      messages: [
+        msg("msg_1", { text: "Add login form" }),
+        msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Done." }] }),
+      ],
+    })
+    await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
+    const index = await readFile(path.join(base, "INDEX.md"), "utf8")
+    assert.match(index, /# Prompt archive index/)
+    assert.match(index, /add-login-form/)
+    assert.match(index, /01-add-login-form-prompt\.md/)
+    assert.match(index, /02-build-result\.md/)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("force re-records already seen messages", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
+  try {
+    const messages = [msg("msg_1", { text: "Add login form" })]
+    const { ctx } = fakeCtx({ messages })
+    await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
+    await processSession(ctx, { ...DEFAULT_OPTIONS, force: true }, base, "ses_1", "succeeded")
+    const folders = await sessionFolders(base)
+    const files = await readdir(path.join(base, folders[0]))
+    assert.ok(files.filter((f) => f.endsWith("-prompt.md")).length >= 2)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("datePrefix adds a date to new session folder names", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
+  try {
+    const { ctx } = fakeCtx({ messages: [msg("msg_1", { text: "Add login form" })] })
+    await processSession(ctx, { ...DEFAULT_OPTIONS, datePrefix: true }, base, "ses_1", "succeeded")
+    const folders = await sessionFolders(base)
+    assert.match(folders[0], /^\d{4}-\d{2}-\d{2}-0001-/)
   } finally {
     await rm(base, { recursive: true, force: true })
   }
@@ -94,7 +146,7 @@ test("a rejected permission flag produces a failed result with a warning marker"
       ses_1: { securityWarning: true, permissionRejected: true },
     }))
     await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
-    const folders = await readdir(base)
+    const folders = await sessionFolders(base)
     const resultFile = (await readdir(path.join(base, folders[0]))).find((f) => f.endsWith("-result.md"))
     assert.ok(resultFile)
     const result = await readFile(path.join(base, folders[0], resultFile), "utf8")
@@ -121,7 +173,7 @@ test("subagent messages share the root session folder", async () => {
       ],
     })
     await processSession(ctx, DEFAULT_OPTIONS, base, "ses_child", "succeeded")
-    const folders = await readdir(base)
+    const folders = await sessionFolders(base)
     assert.equal(folders.length, 1)
     assert.match(folders[0], /^0001-/)
   } finally {
