@@ -193,6 +193,7 @@ export function changedFiles(
 export function deriveStatus(
   messages: ReadonlyArray<HistoryMessage>,
   hint: Outcome,
+  permissionRejected = false,
 ): { status: InteractionStatus; outcome: Outcome } {
   let outcome: Outcome = hint
   const lastIdle = [...messages].reverse().find((m) => m.type === "idle")
@@ -205,6 +206,9 @@ export function deriveStatus(
   ) {
     outcome = "failed"
   }
+  // An explicitly rejected permission ends the turn as a failure, even when the
+  // execution itself reported success.
+  if (permissionRejected) outcome = "failed"
   return { status: outcome === "succeeded" ? "complete" : "incomplete", outcome }
 }
 
@@ -261,6 +265,8 @@ export interface ResultFileInput {
   includeTools?: boolean
   includeChangedFiles?: boolean
   maxChangedFiles?: number
+  /** True when a credential-related permission was flagged in this session. */
+  securityWarning?: boolean
 }
 
 export function renderResultFile(input: ResultFileInput): string {
@@ -282,6 +288,7 @@ export function renderResultFile(input: ResultFileInput): string {
     ["outcome", input.outcome],
     ["changed_files", files],
   ]
+  if (input.securityWarning) fields.push(["security_warning", "true"])
   const body = [
     `# Result — ${input.agent}`,
     "",

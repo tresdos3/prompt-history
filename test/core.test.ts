@@ -191,6 +191,36 @@ test("interrupted executions are marked incomplete", () => {
   })
 })
 
+test("a rejected permission marks an otherwise successful turn as failed", () => {
+  const messages = [message({ id: "msg-1" })]
+  assert.deepEqual(deriveStatus(messages, "succeeded", true), {
+    status: "incomplete",
+    outcome: "failed",
+  })
+  assert.deepEqual(deriveStatus(messages, "succeeded", false), {
+    status: "complete",
+    outcome: "succeeded",
+  })
+})
+
+test("result files carry a security warning flag when requested", () => {
+  const base = {
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    promptFile: "01-prompt.md",
+    timestamp: 1,
+    status: "complete" as const,
+    outcome: "succeeded" as const,
+    responses: [],
+  }
+  const plain = renderResultFile(base)
+  assert.doesNotMatch(plain, /security_warning/)
+  const flagged = renderResultFile({ ...base, securityWarning: true })
+  assert.match(flagged, /security_warning: "true"/)
+})
+
 test("slugify produces short safe names and never leaks a credential", () => {
   assert.equal(slugify("Fix the login form in src/app.ts", 6, 24), "fix-the-login-form-in-sr")
   assert.equal(slugify("***"), "interaction")

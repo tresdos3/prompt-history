@@ -24,14 +24,17 @@ import {
 import { parseOptions, resolveDirectory, type ArchiveOptions } from "./options.ts"
 import {
   appendToArchiveFile,
+  clearSessionFlag,
   createSessionFolder,
   getFolderMap,
   getLastInteractions,
   getSeen,
+  getSessionFlags,
   highestNumber,
   readDirNames,
   setFolderMap,
   setLastInteractions,
+  setSessionFlags,
   setSeen,
   writeNumbered,
   type LastInteraction,
@@ -125,7 +128,10 @@ async function processSession(
   const rootSession = await resolveRoot(ctx, session)
   const firstPrompt = fresh.find((m) => m.type === "user")?.text ?? ""
   const folder = await ensureFolder(ctx, root, rootSession, firstPrompt)
-  const { status, outcome } = deriveStatus(messages, hint)
+  const flags = (await getSessionFlags(ctx))[sessionID] ?? {}
+  const { status, outcome } = deriveStatus(messages, hint, flags.permissionRejected === true)
+  if (flags.permissionRejected) await clearSessionFlag(ctx, sessionID, "permissionRejected")
+  const securityWarning = flags.securityWarning === true
   const interactions = groupInteractions(fresh)
   const lastInteractions = await getLastInteractions(ctx)
   const lastUser = [...messages].reverse().find((m) => m.type === "user")
@@ -161,6 +167,7 @@ async function processSession(
           includeTools: options.includeTools,
           includeChangedFiles: options.includeChangedFiles,
           maxChangedFiles: options.maxChangedFiles,
+          securityWarning,
         }),
       )
       number += 1
@@ -207,6 +214,7 @@ async function processSession(
         includeTools: options.includeTools,
         includeChangedFiles: options.includeChangedFiles,
         maxChangedFiles: options.maxChangedFiles,
+        securityWarning,
       }),
     )
     number += 1
@@ -221,51 +229,98 @@ async function processSession(
   }
 }
 
-/** Map permission request ID -> session ID, for pairing `permission.replied`. */
-const pendingPermissions = new Map<string, string>()
+/** Pending permission requests, with a TTL and cap so entries cannot accumulate forever. */
+interface PendingPermission {
+  sessionID: string
+  at: number
+  flagged: boolean
+}
+const pendingPermissions = new Map<string, PendingPermission>()
+const PENDING_TTL_MS = 10 * 60 * 1000
+const PENDING_MAX = 1000
+
+function prunePendingPermissions(now = Date.now()): void {
+  for (const [id, entry] of pendingPermissions) {
+    if (now - entry.at > PENDING_TTL_MS) pendingPermissions.delete(id)
+  }
+  while (pendingPermissions.size > PENDING_MAX) {
+    const oldest = pendingPermissions.keys().next().value
+    if (oldest === undefined) break
+    pendingPermissions.delete(oldest)
+  }
+}
+
+function forgetSessionPermissions(sessionID: string): void {
+  for (const [id, entry] of pendingPermissions) {
+    if (entry.sessionID === sessionID) pendingPermissions.delete(id)
+  }
+}
 
 async function handlePermissionEvent(
+  ctx: Ctx,
   root: string,
   event: { type: string; data?: Record<string, unknown> },
+  warn: boolean,
 ): Promise<void> {
   const data = event.data ?? {}
+  const now = Date.now()
+  prunePendingPermissions(now)
+
   if (event.type === "permission.asked") {
     const sessionID = typeof data.sessionID === "string" ? data.sessionID : "unknown"
-    const warning = classifyCredentialPermission({
-      action: typeof data.action === "string" ? data.action : "",
-      resources: Array.isArray(data.resources)
-        ? data.resources.filter((r): r is string => typeof r === "string")
-        : [],
-      message: typeof data.message === "string" ? data.message : undefined,
-      metadata: data.metadata && typeof data.metadata === "object"
-        ? (data.metadata as Record<string, unknown>)
-        : undefined,
-    })
+    // Reject tracking works regardless of the warning option; classification is
+    // only needed when warnings are enabled.
+    const warning = warn
+      ? classifyCredentialPermission({
+          action: typeof data.action === "string" ? data.action : "",
+          resources: Array.isArray(data.resources)
+            ? data.resources.filter((r): r is string => typeof r === "string")
+            : [],
+          message: typeof data.message === "string" ? data.message : undefined,
+          metadata: data.metadata && typeof data.metadata === "object"
+            ? (data.metadata as Record<string, unknown>)
+            : undefined,
+        })
+      : undefined
+    if (typeof data.id === "string") {
+      pendingPermissions.set(data.id, { sessionID, at: now, flagged: warning !== undefined })
+    }
     if (!warning) return
-    if (typeof data.id === "string") pendingPermissions.set(data.id, sessionID)
+    await setSessionFlags(ctx, sessionID, { securityWarning: true })
     const reasons = warning.reasons
     console.warn(
-      `[prompt-archive] credential-related permission requested in ${redactSecrets(sessionID)}: ${reasons.join("; ")}`,
+      `[prompt-archive] credential-related permission requested in ${redactSecrets(sessionID)}: ${redactSecrets(reasons.join("; "))}`,
     )
     await appendToArchiveFile(
       root,
       "SECURITY-WARNINGS.md",
-      renderWarningEntry({ sessionID, timestamp: Date.now(), reasons }),
+      renderWarningEntry({ sessionID, timestamp: now, reasons }),
     )
     return
   }
 
   if (event.type === "permission.replied") {
     const requestID = typeof data.requestID === "string" ? data.requestID : ""
-    const sessionID = pendingPermissions.get(requestID)
-    if (!sessionID) return
+    const pending = pendingPermissions.get(requestID)
+    if (!pending) return
     pendingPermissions.delete(requestID)
     const reply = typeof data.reply === "string" ? data.reply : ""
-    console.warn(`[prompt-archive] permission reply for ${redactSecrets(sessionID)}: ${reply}`)
+    if (reply === "reject") {
+      await setSessionFlags(ctx, pending.sessionID, { permissionRejected: true })
+    }
+    if (!pending.flagged) return
+    console.warn(
+      `[prompt-archive] permission reply for ${redactSecrets(pending.sessionID)}: ${redactSecrets(reply)}`,
+    )
     await appendToArchiveFile(
       root,
       "SECURITY-WARNINGS.md",
-      renderWarningEntry({ sessionID, timestamp: Date.now(), reasons: ["permission replied"], reply }),
+      renderWarningEntry({
+        sessionID: pending.sessionID,
+        timestamp: now,
+        reasons: ["permission replied"],
+        reply,
+      }),
     )
   }
 }
@@ -281,9 +336,14 @@ const plugin = Plugin.define({
       const events = ctx.event.subscribe({ signal: controller.signal })
       for await (const raw of events) {
         const event = raw as unknown as { type: string; data?: Record<string, unknown> }
-        if (options.warnOnCredentialPermission &&
-            (event.type === "permission.asked" || event.type === "permission.replied")) {
-          await enqueue(() => handlePermissionEvent(root, event))
+        if (event.type === "permission.asked" || event.type === "permission.replied") {
+          await enqueue(async () => {
+            try {
+              await handlePermissionEvent(ctx, root, event, options.warnOnCredentialPermission)
+            } catch (error) {
+              console.error("[prompt-archive] failed to handle permission event", event.type, error)
+            }
+          })
           continue
         }
         if (!(WATCHED_EVENTS as readonly string[]).includes(event.type)) continue
@@ -294,6 +354,8 @@ const plugin = Plugin.define({
             await processSession(ctx, options, root, sessionID, outcomeFor(event.type))
           } catch (error) {
             console.error("[prompt-archive] failed to record session", sessionID, error)
+          } finally {
+            forgetSessionPermissions(sessionID)
           }
         })
       }

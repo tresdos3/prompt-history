@@ -14,12 +14,69 @@ type Ctx = Plugin.Context
 const SEEN_KEY = "prompt-archive/seen-message-ids"
 const FOLDERS_KEY = "prompt-archive/session-folders"
 const LAST_KEY = "prompt-archive/last-interactions"
+const FLAGS_KEY = "prompt-archive/session-flags"
 
 export interface LastInteraction {
   interactionID: string
   promptFile: string
   agent: string
   title: string
+}
+
+/** Per-session flags carried across events (e.g. a warning or a rejected permission). */
+export interface SessionFlags {
+  securityWarning?: boolean
+  permissionRejected?: boolean
+}
+
+export async function getSessionFlags(ctx: Ctx): Promise<Record<string, SessionFlags>> {
+  const raw = await ctx.storage.get(FLAGS_KEY)
+  let value: unknown = raw
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      return {}
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const result: Record<string, SessionFlags> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue
+    const record = entry as Record<string, unknown>
+    const flags: SessionFlags = {}
+    if (record.securityWarning === true) flags.securityWarning = true
+    if (record.permissionRejected === true) flags.permissionRejected = true
+    if (Object.keys(flags).length > 0) result[key] = flags
+  }
+  return result
+}
+
+/** Merge flags for one session, persisting them for later events. */
+export async function setSessionFlags(
+  ctx: Ctx,
+  sessionID: string,
+  patch: Partial<SessionFlags>,
+): Promise<void> {
+  const all = await getSessionFlags(ctx)
+  all[sessionID] = { ...all[sessionID], ...patch }
+  await ctx.storage.set(FLAGS_KEY, JSON.stringify(all))
+}
+
+/** Remove a flag from one session (used for one-shot signals such as a rejection). */
+export async function clearSessionFlag(
+  ctx: Ctx,
+  sessionID: string,
+  flag: keyof SessionFlags,
+): Promise<void> {
+  const all = await getSessionFlags(ctx)
+  const current = all[sessionID]
+  if (!current || !current[flag]) return
+  const updated = { ...current }
+  delete updated[flag]
+  if (Object.keys(updated).length === 0) delete all[sessionID]
+  else all[sessionID] = updated
+  await ctx.storage.set(FLAGS_KEY, JSON.stringify(all))
 }
 
 export async function getSeen(ctx: Ctx): Promise<string[]> {
