@@ -269,10 +269,18 @@ test("credential-bearing file paths never reach the archive", () => {
         "my-token.txt",
         "src/app.ts",
         "src/lib.ts",
+        // Legitimate files that merely contain credential-ish substrings.
+        "src/tokenizer/index.ts",
+        "src/auth/password-reset.ts",
       ],
     },
   })
-  assert.deepEqual(changedFiles([assistant]), ["src/app.ts", "src/lib.ts"])
+  assert.deepEqual(changedFiles([assistant]), [
+    "src/app.ts",
+    "src/lib.ts",
+    "src/tokenizer/index.ts",
+    "src/auth/password-reset.ts",
+  ])
 })
 
 test("fake credentials never appear in rendered prompt or result files", () => {

@@ -7,7 +7,7 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 ## Commands
 
 - `pnpm install` (pnpm 12 in CI; lockfile is `pnpm-lock.yaml`).
-- `pnpm test` — Node's built-in test runner (`node --test`), no test framework. `pnpm run test:root` runs only `test/*.test.ts`.
+- `pnpm test` — Node's built-in test runner (`node --test`), no test framework. `pnpm run test:root` runs only `test/*.test.ts`. Tests: `core.test.ts` (pure helpers), `options.test.ts`, `store.test.ts` (temp-dir filesystem/collision logic), `integration.test.ts` (mocked ctx through `processSession()`).
 - `pnpm run typecheck` — `tsc --noEmit`.
 - `pnpm run pack:check` — `pnpm pack` to the pre-created OpenCode temp dir; verifies the published tarball.
 - CI order: `pnpm install --frozen-lockfile` → `pnpm test` → `pnpm run typecheck` → `pnpm pack`. Release (`v*` tags) adds a check that the tag matches `package.json` version, then `pnpm publish --provenance`.
@@ -34,6 +34,7 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 - `session.idle` is unreliable for short CLI runs, hence `session.execution.succeeded` is also a trigger. A single turn can produce multiple result files sharing one prompt file.
 - `redactSecrets()` must run **before** `slugify()` strips punctuation — removing `=`/`:` first would defeat credential patterns and leak secrets into filenames (`core.ts` `slugify`).
 - Keep redaction applied to every content surface: prompt text, response text, reasoning, filenames, `changed_files` paths, and warning text. Tests assert secrets never reach disk. PII (phone/SSN/card/email) is deliberately NOT detected — see `SECURITY.md`.
+- `isSecretPath()` matches whole path components (e.g. `.env`, `.aws/`, `my-token.txt`), not substrings — `src/tokenizer/*` and `src/auth/password-reset.ts` must remain in archives. Do not revert to a loose `secret|token|password` substring regex.
 - Credential-request warnings are opt-in (`warnOnCredentialPermission`, default false) and heuristic. Never write raw secret values into `SECURITY-WARNINGS.md`; the event does not carry them and `renderWarningEntry()` re-redacts. Warnings cannot detect pre-authorized reads.
 - File numbering is global serial work: keep updates going through the `enqueue()` promise chain in `index.ts`, otherwise two events can allocate the same number.
 - Record writes use `wx`, never overwrite. Changing this breaks the "never overwrites" guarantee and the tests. `SECURITY-WARNINGS.md` is the intentional exception: append-only via `appendToArchiveFile()`.

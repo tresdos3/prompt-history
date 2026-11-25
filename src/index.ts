@@ -112,7 +112,8 @@ async function ensureFolder(
   return folder
 }
 
-async function processSession(
+/** Exported for integration tests; drives one session from an event trigger. */
+export async function processSession(
   ctx: Ctx,
   options: ArchiveOptions,
   root: string,

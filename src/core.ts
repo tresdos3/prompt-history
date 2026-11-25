@@ -161,8 +161,19 @@ export function toolNames(message: HistoryMessage): string[] {
 
 const IGNORED_CHANGE = /(^|\/)(node_modules|\.git)\//
 
-/** Paths that are likely to hold credentials; never written to the archive. */
-const SECRET_PATH = /(?:\.env(?:\.|$)|(?:^|\/)\.aws\/|(?:^|\/)\.ssh\/|(?:^|\/)credentials(?:$|\/)|secret|token|password|\.pem$|\.key$|id_rsa|\.npmrc$|\.netrc$)/i
+/**
+ * Credential-bearing path components. Matched whole, so ordinary files such as
+ * `src/tokenizer/index.ts` or `src/auth/password-reset.ts` are not discarded.
+ */
+const SECRET_PATH_COMPONENT = /^(?:\.env[^/]*|(?:(?:[a-z0-9]+[-_])?(?:credentials|secrets?|tokens?|passwords?)(?:\.(?:txt|json|ya?ml|env|key|pem))?)|(?:\.aws|\.ssh|\.npmrc|\.netrc|\.htpasswd|id_rsa|id_ed25519))$/i
+const SECRET_PATH_EXT = /\.(?:pem|key|p12|pfx)$/i
+
+/** True when a path looks like it holds credentials. Exported for tests. */
+export function isSecretPath(file: string): boolean {
+  const normalized = file.replace(/\\/g, "/")
+  return normalized.split("/").some((part) => SECRET_PATH_COMPONENT.test(part)) ||
+    SECRET_PATH_EXT.test(normalized)
+}
 
 /**
  * Deduplicate changed-file paths reported on assistant messages.
@@ -180,7 +191,7 @@ export function changedFiles(
         typeof file === "string" &&
         file.length > 0 &&
         !IGNORED_CHANGE.test(file) &&
-        !SECRET_PATH.test(file)
+        !isSecretPath(file)
       ) {
         files.add(redactSecrets(file))
       }
