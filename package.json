@@ -1,6 +1,6 @@
 {
   "name": "opencode-prompt-archive",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenCode plugin that records prompts and assistant responses as Markdown.",
   "type": "module",
   "exports": {
