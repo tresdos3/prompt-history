@@ -8,6 +8,7 @@
 import { appendFile, mkdir, open, readdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { Plugin } from "@opencode/plugin"
+import type { ExportEntry } from "./core.ts"
 
 type Ctx = Plugin.Context
 
@@ -16,6 +17,7 @@ const FOLDERS_KEY = "prompt-archive/session-folders"
 const LAST_KEY = "prompt-archive/last-interactions"
 const FLAGS_KEY = "prompt-archive/session-flags"
 const INDEX_KEY = "prompt-archive/index"
+const EXPORT_KEY = "prompt-archive/export-entries"
 
 export interface LastInteraction {
   interactionID: string
@@ -66,6 +68,37 @@ export async function getIndex(ctx: Ctx): Promise<Record<string, IndexEntry>> {
     }
   }
   return result
+}
+
+export async function getExportEntries(ctx: Ctx): Promise<ExportEntry[]> {
+  const raw = await ctx.storage.get(EXPORT_KEY)
+  let value: unknown = raw
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is ExportEntry => {
+    if (!entry || typeof entry !== "object") return false
+    const e = entry as Record<string, unknown>
+    return (
+      typeof e.interactionID === "string" &&
+      typeof e.sessionID === "string" &&
+      typeof e.agent === "string" &&
+      typeof e.timestamp === "number" &&
+      typeof e.promptText === "string"
+    )
+  })
+}
+
+export async function addExportEntries(ctx: Ctx, entries: ReadonlyArray<ExportEntry>): Promise<void> {
+  const all = await getExportEntries(ctx)
+  const ids = new Set(entries.map((entry) => entry.interactionID))
+  const merged = [...all.filter((entry) => !ids.has(entry.interactionID)), ...entries]
+  await ctx.storage.set(EXPORT_KEY, JSON.stringify(merged))
 }
 
 export async function setIndexEntry(ctx: Ctx, folder: string, entry: IndexEntry): Promise<void> {

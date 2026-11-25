@@ -9,24 +9,32 @@
 import { Plugin } from "@opencode/plugin"
 import path from "node:path"
 import {
+  changedFiles,
   classifyCredentialPermission,
   collectNewMessages,
   deriveStatus,
   groupInteractions,
   redactSecrets,
+  responseText,
+  toolNames,
+  renderExport,
   renderIndex,
   renderPromptFile,
   renderResultFile,
   renderWarningEntry,
+  type ExportEntry,
   slugify,
   type HistoryMessage,
+  type InteractionStatus,
   type Outcome,
 } from "./core.ts"
 import { parseOptions, resolveDirectory, type ArchiveOptions } from "./options.ts"
 import {
+  addExportEntries,
   appendToArchiveFile,
   clearSessionFlag,
   createSessionFolder,
+  getExportEntries,
   getFolderMap,
   getIndex,
   getLastInteractions,
@@ -116,6 +124,41 @@ async function ensureFolder(
   return folder
 }
 
+/** Regenerate the configured consolidated export from stored interaction rows. */
+async function regenerateExport(ctx: Ctx, root: string, options: ArchiveOptions): Promise<void> {
+  if (!options.export) return
+  const all = await getExportEntries(ctx)
+  if (all.length === 0) return
+  await writeArchiveFile(root, options.export.outFile, renderExport(all, options.export.format, options.export))
+}
+
+/** Build one consolidated-export row from an interaction's rendered content. */
+function buildExportEntry(
+  interactionID: string,
+  sessionID: string,
+  agent: string,
+  timestamp: number,
+  status: InteractionStatus,
+  outcome: Outcome,
+  promptFile: string,
+  promptText: string,
+  responses: ReadonlyArray<HistoryMessage>,
+): ExportEntry {
+  return {
+    interactionID,
+    sessionID,
+    agent,
+    timestamp,
+    status,
+    outcome,
+    promptFile,
+    promptText,
+    responseText: responses.map(responseText).filter(Boolean).join("\n\n"),
+    tools: [...new Set(responses.flatMap(toolNames))],
+    changedFiles: changedFiles(responses),
+  }
+}
+
 /** Exported for integration tests; drives one session from an event trigger. */
 export async function processSession(ctx: Ctx, options: ArchiveOptions, root: string, sessionID: string, hint: Outcome): Promise<void> {
   const session = (await ctx.session.get({ sessionID })) as unknown as SessionLike
@@ -123,12 +166,16 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
   const seen = new Set(await getSeen(ctx))
   if (options.force) for (const message of messages) seen.delete(message.id)
   const fresh = collectNewMessages(messages, seen)
-  if (fresh.length === 0) return
+  if (fresh.length === 0) {
+    await regenerateExport(ctx, root, options)
+    return
+  }
 
   const rootSession = await resolveRoot(ctx, session, options.maxParentDepth)
   const firstPrompt = fresh.find((m) => m.type === "user")?.text ?? ""
   const folder = await ensureFolder(ctx, root, rootSession, firstPrompt, options)
   const written: string[] = []
+  const exportEntries: ExportEntry[] = []
   const flags = (await getSessionFlags(ctx))[sessionID] ?? {}
   const { status, outcome } = deriveStatus(messages, hint, flags.permissionRejected === true)
   if (flags.permissionRejected && !options.dryRun) {
@@ -191,6 +238,19 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
         }),
       )
       written.push(resultFile)
+      exportEntries.push(
+        buildExportEntry(
+          `${interactionID}-cont-${number}`,
+          sessionID,
+          agent,
+          lastResponse?.time?.completed ?? lastResponse?.time?.created ?? Date.now(),
+          status,
+          outcome,
+          previous?.promptFile ?? "",
+          "(continuation)",
+          interaction.responses,
+        ),
+      )
       number += 1
       for (const message of interaction.responses) seen.add(message.id)
       await setSeen(ctx, [...seen])
@@ -242,6 +302,19 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
       }),
     )
     written.push(resultFile)
+    exportEntries.push(
+      buildExportEntry(
+        interactionID,
+        sessionID,
+        agent,
+        lastResponse?.time?.completed ?? lastResponse?.time?.created ?? Date.now(),
+        status,
+        outcome,
+        promptFile,
+        interaction.prompt.text ?? "",
+        interaction.responses,
+      ),
+    )
     number += 1
 
     const record: LastInteraction = { interactionID, promptFile, agent, title }
@@ -262,6 +335,9 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
     })
     await writeArchiveFile(root, "INDEX.md", renderIndex(await getIndex(ctx)))
   }
+
+  if (exportEntries.length > 0) await addExportEntries(ctx, exportEntries)
+  await regenerateExport(ctx, root, options)
 }
 
 /** First prompt timestamp, falling back to the current time. */

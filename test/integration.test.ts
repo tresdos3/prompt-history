@@ -106,6 +106,27 @@ test("INDEX.md links the recorded session and its files", async () => {
   }
 })
 
+test("configured export is regenerated with filtered content", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
+  try {
+    const { ctx } = fakeCtx({
+      messages: [msg("msg_1", { text: "Add login form" }), msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Done." }] })],
+    })
+    const options = {
+      ...DEFAULT_OPTIONS,
+      export: { format: "md" as const, outFile: "SEARCH.md", text: "login" },
+    }
+    await processSession(ctx, options, base, "ses_1", "succeeded")
+    const exported = await readFile(path.join(base, "SEARCH.md"), "utf8")
+    assert.match(exported, /# Prompt archive export/)
+    assert.match(exported, /Add login form/)
+    await processSession(ctx, { ...options, export: { ...options.export, text: "nomatch" } }, base, "ses_1", "succeeded")
+    assert.doesNotMatch(await readFile(path.join(base, "SEARCH.md"), "utf8"), /Add login form/)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
 test("force re-records already seen messages", async () => {
   const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
   try {

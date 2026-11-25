@@ -117,7 +117,15 @@ Pass options in `opencode.json(c)`:
         "force": false,
         "datePrefix": false,
         "maxParentDepth": 32,
-        "dryRun": false
+        "dryRun": false,
+        "export": {
+          "format": "md",
+          "outFile": "ARCHIVE.md",
+          "dateFrom": "2026-01-01",
+          "agent": "build",
+          "status": "complete",
+          "text": "login"
+        }
       }
     }
   ]
@@ -138,6 +146,11 @@ Pass options in `opencode.json(c)`:
 | `datePrefix` | boolean | `false` | Name new session folders `YYYY-MM-DD-NNNN-<title>` for chronological sorting. |
 | `maxParentDepth` | number | `32` | Maximum `parentID` hops when resolving a subagent's root session. |
 | `dryRun` | boolean | `false` | Log the files that would be written without creating or modifying anything. |
+| `export` | object | unset | Generate a consolidated, searchable export file. See below. |
+
+### Consolidated export
+
+Set `export` to generate a single file containing every recorded interaction, filtered by `dateFrom` / `dateTo` (YYYY-MM-DD), `agent` (substring), `status` (`complete` or `incomplete`), and `text` (case-insensitive substring of prompt or response). `format` is `md` (default) or `jsonl`; `outFile` defaults to `ARCHIVE.md`. The file is regenerated after each session, so filter changes on reload take effect immediately. All content is redacted before writing.
 
 An `INDEX.md` in the archive root lists every recorded session with links to its prompt and result files. It is regenerated after each session; session records themselves are never overwritten.
 

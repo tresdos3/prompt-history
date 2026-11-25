@@ -4,9 +4,12 @@ import {
   changedFiles,
   classifyCredentialPermission,
   collectNewMessages,
+  filterExportEntries,
   groupInteractions,
   deriveStatus,
   redactSecrets,
+  renderExport,
+  type ExportEntry,
   renderPromptFile,
   renderResultFile,
   renderWarningEntry,
@@ -373,6 +376,72 @@ test("overlapping secret formats are all removed from one string", () => {
     assert.doesNotMatch(out, new RegExp(secret), secret)
   }
   assert.equal((out.match(/\[REDACTED\]/g) ?? []).length >= 4, true)
+})
+
+const EXPORT_SAMPLE: ExportEntry[] = [
+  {
+    interactionID: "ses::msg1",
+    sessionID: "ses",
+    agent: "build",
+    timestamp: Date.parse("2026-11-20T10:00:00Z"),
+    status: "complete",
+    outcome: "succeeded",
+    promptFile: "01-add-login-prompt.md",
+    promptText: "Add login form",
+    responseText: "Done. API_KEY=sk-fake1234567890",
+    tools: ["bash"],
+    changedFiles: ["src/app.ts"],
+  },
+  {
+    interactionID: "ses::msg2",
+    sessionID: "ses",
+    agent: "explore",
+    timestamp: Date.parse("2026-11-24T10:00:00Z"),
+    status: "incomplete",
+    outcome: "interrupted",
+    promptFile: "01-search-prompt.md",
+    promptText: "Search the code",
+    responseText: "Stopped.",
+    tools: [],
+    changedFiles: [],
+  },
+]
+
+test("export filters combine date, agent, status, and text", () => {
+  assert.equal(filterExportEntries(EXPORT_SAMPLE, {}).length, 2)
+  assert.deepEqual(
+    filterExportEntries(EXPORT_SAMPLE, { agent: "build" }).map((e) => e.interactionID),
+    ["ses::msg1"],
+  )
+  assert.deepEqual(
+    filterExportEntries(EXPORT_SAMPLE, { status: "incomplete" }).map((e) => e.interactionID),
+    ["ses::msg2"],
+  )
+  assert.deepEqual(
+    filterExportEntries(EXPORT_SAMPLE, { dateFrom: "2026-11-22" }).map((e) => e.interactionID),
+    ["ses::msg2"],
+  )
+  assert.deepEqual(
+    filterExportEntries(EXPORT_SAMPLE, { text: "login" }).map((e) => e.interactionID),
+    ["ses::msg1"],
+  )
+  assert.equal(filterExportEntries(EXPORT_SAMPLE, { text: "missing" }).length, 0)
+})
+
+test("export renderers redact secrets in both formats", () => {
+  const md = renderExport(EXPORT_SAMPLE, "md")
+  assert.match(md, /# Prompt archive export/)
+  assert.match(md, /Add login form/)
+  assert.doesNotMatch(md, /sk-fake1234567890/)
+  assert.match(md, /\[REDACTED\]/)
+  const jsonl = renderExport(EXPORT_SAMPLE, "jsonl")
+  const rows = jsonl
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line))
+  assert.equal(rows.length, 2)
+  assert.equal(rows[0].session_id, "ses")
+  assert.doesNotMatch(jsonl, /sk-fake1234567890/)
 })
 
 test("warning reasons are sanitized and never contain raw secret values", () => {

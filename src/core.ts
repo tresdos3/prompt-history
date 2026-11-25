@@ -301,6 +301,84 @@ export function renderResultFile(input: ResultFileInput): string {
   return `${frontmatter(fields)}\n${body.join("\n")}\n`
 }
 
+/** One archived interaction, stored for consolidated export. */
+export interface ExportEntry {
+  interactionID: string
+  sessionID: string
+  agent: string
+  timestamp: number
+  status: InteractionStatus
+  outcome: Outcome
+  promptFile: string
+  promptText: string
+  responseText: string
+  tools: string[]
+  changedFiles: string[]
+}
+
+/** Filters applied when rendering a consolidated export. */
+export interface ExportFilter {
+  dateFrom?: string
+  dateTo?: string
+  agent?: string
+  status?: InteractionStatus
+  text?: string
+  tag?: string
+}
+
+/** Filter export entries. All conditions are ANDed; text matches prompt or response. */
+export function filterExportEntries(entries: ReadonlyArray<ExportEntry>, filters: ExportFilter): ExportEntry[] {
+  const needle = filters.text?.toLowerCase()
+  return entries.filter((entry) => {
+    const iso = new Date(entry.timestamp).toISOString()
+    const date = iso.slice(0, 10)
+    if (filters.dateFrom && date < filters.dateFrom) return false
+    if (filters.dateTo && date > filters.dateTo) return false
+    if (filters.agent && !entry.agent.toLowerCase().includes(filters.agent.toLowerCase())) return false
+    if (filters.status && entry.status !== filters.status) return false
+    if (needle && !`${entry.promptText}\n${entry.responseText}`.toLowerCase().includes(needle)) return false
+    return true
+  })
+}
+
+/** Render a consolidated export as Markdown or JSONL. All output is redacted. */
+export function renderExport(entries: ReadonlyArray<ExportEntry>, format: "md" | "jsonl", filters: ExportFilter = {}): string {
+  const selected = filterExportEntries(entries, filters)
+  if (format === "jsonl") {
+    return (
+      selected
+        .map((entry) =>
+          JSON.stringify({
+            interaction: redactSecrets(entry.interactionID),
+            session_id: redactSecrets(entry.sessionID),
+            agent: redactSecrets(entry.agent),
+            timestamp: toIso(entry.timestamp),
+            status: entry.status,
+            outcome: entry.outcome,
+            prompt_file: redactSecrets(entry.promptFile),
+            prompt: redactSecrets(entry.promptText),
+            response: redactSecrets(entry.responseText),
+            tools: entry.tools.map(redactSecrets),
+            changed_files: entry.changedFiles.map(redactSecrets),
+          }),
+        )
+        .join("\n") + (selected.length ? "\n" : "")
+    )
+  }
+  const lines = ["# Prompt archive export", ""]
+  for (const entry of selected) {
+    lines.push(`## ${redactSecrets(entry.agent)} — ${toIso(entry.timestamp)}`, "")
+    lines.push(`- Interaction: \`${redactSecrets(entry.interactionID)}\``)
+    lines.push(`- Status: ${entry.status} (${entry.outcome})`)
+    lines.push(`- Prompt file: [${redactSecrets(entry.promptFile)}](./${redactSecrets(entry.promptFile)})`)
+    lines.push("", "### Prompt", "", redactSecrets(entry.promptText), "", "### Response", "")
+    lines.push(redactSecrets(entry.responseText) || "_No response recorded._")
+    if (entry.tools.length) lines.push("", "Tools: " + entry.tools.map((t) => `\`${redactSecrets(t)}\``).join(", "))
+    lines.push("")
+  }
+  return `${lines.join("\n").trimEnd()}\n`
+}
+
 /** Render the archive root INDEX.md from persisted session entries. */
 export function renderIndex(entries: Readonly<Record<string, { title: string; date: string; files: ReadonlyArray<string> }>>): string {
   const lines = ["# Prompt archive index", ""]

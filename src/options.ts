@@ -5,6 +5,17 @@
 
 import path from "node:path"
 
+/** Configuration for the consolidated searchable export file. */
+export interface ExportOptions {
+  format: "md" | "jsonl"
+  outFile: string
+  dateFrom?: string
+  dateTo?: string
+  agent?: string
+  status?: "complete" | "incomplete"
+  text?: string
+}
+
 export interface ArchiveOptions {
   /** Output root; relative paths resolve against the OpenCode project directory. */
   directory: string
@@ -25,6 +36,8 @@ export interface ArchiveOptions {
   maxParentDepth: number
   /** Log what would be written without creating or modifying files. */
   dryRun: boolean
+  /** When set, regenerate a consolidated export after each session. */
+  export?: ExportOptions
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -40,6 +53,30 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   datePrefix: false,
   maxParentDepth: 32,
   dryRun: false,
+}
+
+/** Parse the optional export configuration. Invalid values are ignored with a warning. */
+function parseExportOptions(raw: unknown, warnings: string[]): ExportOptions | undefined {
+  if (raw === undefined) return undefined
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    warnings.push("export must be an object")
+    return undefined
+  }
+  const input = raw as Record<string, unknown>
+  const result: ExportOptions = {
+    format: input.format === "jsonl" ? "jsonl" : "md",
+    outFile: typeof input.outFile === "string" && input.outFile.trim() ? input.outFile.trim() : "ARCHIVE.md",
+  }
+  if (input.format !== undefined && input.format !== "md" && input.format !== "jsonl") {
+    warnings.push("export.format must be 'md' or 'jsonl'")
+  }
+  for (const key of ["dateFrom", "dateTo", "agent", "text"] as const) {
+    if (typeof input[key] === "string") result[key] = input[key]
+    else if (input[key] !== undefined) warnings.push(`export.${key} must be a string`)
+  }
+  if (input.status === "complete" || input.status === "incomplete") result.status = input.status
+  else if (input.status !== undefined) warnings.push("export.status must be 'complete' or 'incomplete'")
+  return result
 }
 
 export function parseOptions(raw: unknown): ArchiveOptions {
@@ -86,6 +123,9 @@ export function parseOptions(raw: unknown): ArchiveOptions {
   } else if (input.maxParentDepth !== undefined) {
     warnings.push("maxParentDepth must be a finite number")
   }
+
+  const exportOptions = parseExportOptions(input.export, warnings)
+  if (exportOptions) options.export = exportOptions
 
   if (warnings.length > 0) {
     console.warn(`[prompt-archive] invalid options (using defaults): ${warnings.join("; ")}`)

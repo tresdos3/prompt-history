@@ -21,6 +21,7 @@ test("options accept valid overrides", () => {
     datePrefix: true,
     maxParentDepth: 8,
     dryRun: true,
+    export: { format: "jsonl", outFile: "all.jsonl", agent: "build", status: "complete" },
   })
   assert.equal(parsed.directory, "/tmp/archive")
   assert.equal(parsed.includeReasoning, true)
@@ -34,6 +35,7 @@ test("options accept valid overrides", () => {
   assert.equal(parsed.datePrefix, true)
   assert.equal(parsed.maxParentDepth, 8)
   assert.equal(parsed.dryRun, true)
+  assert.deepEqual(parsed.export, { format: "jsonl", outFile: "all.jsonl", agent: "build", status: "complete" })
 })
 
 test("invalid options fall back to defaults", () => {
