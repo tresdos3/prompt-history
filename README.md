@@ -1,6 +1,6 @@
 # opencode-prompt-archive
 
-[![CI](https://github.com/tresdos/prompt-history/actions/workflows/ci.yml/badge.svg)](https://github.com/tresdos/prompt-history/actions/workflows/ci.yml)
+[![CI](https://github.com/tresdos3/prompt-history/actions/workflows/ci.yml/badge.svg)](https://github.com/tresdos3/prompt-history/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 An [OpenCode](https://opencode.ai/) plugin that automatically saves prompts and complete assistant responses as Markdown, so you keep a searchable record of every development session without copying anything by hand.
@@ -18,7 +18,7 @@ An [OpenCode](https://opencode.ai/) plugin that automatically saves prompts and 
 ### From GitHub (recommended until npm publication)
 
 ```sh
-opencode plugin add github:tresdos/prompt-history#main
+opencode plugin add github:tresdos3/prompt-history#main
 ```
 
 OpenCode installs the package, reloads it, and keeps it pinned to that branch. To update later:
@@ -30,7 +30,7 @@ opencode plugin update opencode-prompt-archive
 ### From a local checkout
 
 ```sh
-git clone https://github.com/tresdos/prompt-history.git
+git clone https://github.com/tresdos3/prompt-history.git
 opencode plugin add ~/Documents/Apps/prompt-history
 ```
 
