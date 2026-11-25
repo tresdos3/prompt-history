@@ -2,12 +2,14 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import {
   changedFiles,
+  classifyCredentialPermission,
   collectNewMessages,
   groupInteractions,
   deriveStatus,
   redactSecrets,
   renderPromptFile,
   renderResultFile,
+  renderWarningEntry,
   slugify,
   type HistoryMessage,
 } from "../src/core.ts"
@@ -277,4 +279,38 @@ test("fake credentials never appear in rendered prompt or result files", () => {
     assert.doesNotMatch(rendered, /sk-fake1234567890xyz/)
     assert.match(rendered, /\[REDACTED\]/)
   }
+})
+
+test("credential permission classifier flags sensitive requests", () => {
+  const cases = [
+    { action: "read", resources: ["/work/.env"], message: "" },
+    { action: "read", resources: ["/work/.aws/credentials"], message: "" },
+    { action: "bash", resources: [], message: "export MY_API_KEY=fake1234567890" },
+    { action: "webfetch", resources: [], message: "fetch the auth token for the API" },
+    { action: "edit", resources: ["src/app.ts"], message: "update the login form" },
+  ]
+  const flagged = cases.map((c) => classifyCredentialPermission(c) !== undefined)
+  assert.deepEqual(flagged, [true, true, true, true, false])
+})
+
+test("warning reasons are sanitized and never contain raw secret values", () => {
+  const warning = classifyCredentialPermission({
+    action: "bash",
+    resources: [".env"],
+    message: "export TOKEN=sk-fake1234567890xyz",
+  })
+  assert.ok(warning)
+  const joined = warning.reasons.join(" ")
+  assert.doesNotMatch(joined, /sk-fake1234567890xyz/)
+  assert.match(joined, /\[REDACTED\]/)
+
+  const entry = renderWarningEntry({
+    sessionID: "ses_fake123",
+    timestamp: 1,
+    reasons: warning.reasons,
+    reply: "once",
+  })
+  assert.match(entry, /## 1970-01-01T00:00:00\.001Z — ses_fake123/)
+  assert.doesNotMatch(entry, /sk-fake1234567890xyz/)
+  assert.match(entry, /User reply: once/)
 })

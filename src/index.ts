@@ -9,18 +9,21 @@
 import { Plugin } from "@opencode/plugin"
 import path from "node:path"
 import {
+  classifyCredentialPermission,
   collectNewMessages,
   deriveStatus,
   groupInteractions,
   redactSecrets,
   renderPromptFile,
   renderResultFile,
+  renderWarningEntry,
   slugify,
   type HistoryMessage,
   type Outcome,
 } from "./core.ts"
 import { parseOptions, resolveDirectory, type ArchiveOptions } from "./options.ts"
 import {
+  appendToArchiveFile,
   createSessionFolder,
   getFolderMap,
   getLastInteractions,
@@ -218,6 +221,55 @@ async function processSession(
   }
 }
 
+/** Map permission request ID -> session ID, for pairing `permission.replied`. */
+const pendingPermissions = new Map<string, string>()
+
+async function handlePermissionEvent(
+  root: string,
+  event: { type: string; data?: Record<string, unknown> },
+): Promise<void> {
+  const data = event.data ?? {}
+  if (event.type === "permission.asked") {
+    const sessionID = typeof data.sessionID === "string" ? data.sessionID : "unknown"
+    const warning = classifyCredentialPermission({
+      action: typeof data.action === "string" ? data.action : "",
+      resources: Array.isArray(data.resources)
+        ? data.resources.filter((r): r is string => typeof r === "string")
+        : [],
+      message: typeof data.message === "string" ? data.message : undefined,
+      metadata: data.metadata && typeof data.metadata === "object"
+        ? (data.metadata as Record<string, unknown>)
+        : undefined,
+    })
+    if (!warning) return
+    if (typeof data.id === "string") pendingPermissions.set(data.id, sessionID)
+    const reasons = warning.reasons
+    console.warn(
+      `[prompt-archive] credential-related permission requested in ${redactSecrets(sessionID)}: ${reasons.join("; ")}`,
+    )
+    await appendToArchiveFile(
+      root,
+      "SECURITY-WARNINGS.md",
+      renderWarningEntry({ sessionID, timestamp: Date.now(), reasons }),
+    )
+    return
+  }
+
+  if (event.type === "permission.replied") {
+    const requestID = typeof data.requestID === "string" ? data.requestID : ""
+    const sessionID = pendingPermissions.get(requestID)
+    if (!sessionID) return
+    pendingPermissions.delete(requestID)
+    const reply = typeof data.reply === "string" ? data.reply : ""
+    console.warn(`[prompt-archive] permission reply for ${redactSecrets(sessionID)}: ${reply}`)
+    await appendToArchiveFile(
+      root,
+      "SECURITY-WARNINGS.md",
+      renderWarningEntry({ sessionID, timestamp: Date.now(), reasons: ["permission replied"], reply }),
+    )
+  }
+}
+
 const plugin = Plugin.define({
   id: "opencode.prompt-archive",
   setup(ctx) {
@@ -228,10 +280,15 @@ const plugin = Plugin.define({
     void (async () => {
       const events = ctx.event.subscribe({ signal: controller.signal })
       for await (const raw of events) {
-        const event = raw as unknown as { type: string; data?: { sessionID?: string } }
+        const event = raw as unknown as { type: string; data?: Record<string, unknown> }
+        if (options.warnOnCredentialPermission &&
+            (event.type === "permission.asked" || event.type === "permission.replied")) {
+          await enqueue(() => handlePermissionEvent(root, event))
+          continue
+        }
         if (!(WATCHED_EVENTS as readonly string[]).includes(event.type)) continue
         const sessionID = event.data?.sessionID
-        if (!sessionID) continue
+        if (typeof sessionID !== "string") continue
         await enqueue(async () => {
           try {
             await processSession(ctx, options, root, sessionID, outcomeFor(event.type))

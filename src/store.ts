@@ -5,7 +5,7 @@
  * overwritten. No child processes are spawned by this plugin.
  */
 
-import { mkdir, open, readdir } from "node:fs/promises"
+import { appendFile, mkdir, open, readdir } from "node:fs/promises"
 import path from "node:path"
 import type { Plugin } from "@opencode/plugin"
 
@@ -126,6 +126,12 @@ export async function createSessionFolder(
       throw error
     }
   }
+}
+
+/** Append a section to a named file in the archive root, creating it on first use. */
+export async function appendToArchiveFile(root: string, filename: string, content: string): Promise<void> {
+  await mkdir(root, { recursive: true })
+  await appendFile(path.join(root, filename), content, "utf8")
 }
 
 /** Write a numbered Markdown file exclusively; bump the number on collision. */

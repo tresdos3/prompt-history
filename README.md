@@ -111,7 +111,8 @@ Pass options in `opencode.json(c)`:
         "includeTools": true,
         "includeChangedFiles": true,
         "maxChangedFiles": 200,
-        "verbose": false
+        "verbose": false,
+        "warnOnCredentialPermission": false
       }
     }
   ]
@@ -126,8 +127,19 @@ Pass options in `opencode.json(c)`:
 | `includeChangedFiles` | boolean | `true` | Record changed files from the assistant snapshot. |
 | `maxChangedFiles` | number | `200` | Maximum number of changed-file paths per result. `node_modules/` and `.git/` paths are always excluded. |
 | `verbose` | boolean | `false` | Log the output directory once at plugin load. |
+| `warnOnCredentialPermission` | boolean | `false` | Warn (stderr + `SECURITY-WARNINGS.md` in the archive) when a permission request looks credential-related. See below. |
 
 Invalid option values fall back to the defaults with a warning; they never stop recording.
+
+### Credential-request warnings
+
+Set `warnOnCredentialPermission: true` to be notified when the agent asks for permission to do something that looks credential-related — for example reading a `.env` file, an `~/.aws/credentials` file, or a shell command that exports a token. The plugin:
+
+- logs a warning to stderr with the reason and sanitized resource path;
+- appends a sanitized entry to `SECURITY-WARNINGS.md` in the archive root (never overwriting prior entries);
+- records the user's reply (`once` / `always` / `reject`) when available.
+
+This is a **heuristic**, not a security guarantee. It only sees the action, resource paths, and message carried by the permission event — never actual secret values — and cannot detect reads the agent is already allowed to make. Treat it as a notice to review the archive, not as a barrier. See [SECURITY.md](SECURITY.md) for details.
 
 ## Privacy and safety
 

@@ -20,9 +20,9 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 
 ## Architecture / execution flow
 
-- `src/index.ts`: plugin entry. Subscribes to the event stream and filters to `session.execution.succeeded|failed|interrupted` and `session.idle` (`WATCHED_EVENTS`). Events are only triggers; `ctx.session.context()` is the source of truth.
-- `src/core.ts`: pure helpers (redaction, grouping, status, markdown rendering) with no filesystem/OpenCode dependencies — unit tests target this module.
-- `src/store.ts`: filesystem writes and `ctx.storage` state (seen message IDs, session-folder map, last-interaction map). Writes are exclusive (`wx`); existing files are never overwritten and numbers bump on collision.
+- `src/index.ts`: plugin entry. Subscribes to the event stream and filters to `session.execution.succeeded|failed|interrupted` and `session.idle` (`WATCHED_EVENTS`). Events are only triggers; `ctx.session.context()` is the source of truth. With `warnOnCredentialPermission: true`, also handles `permission.asked` / `permission.replied` via `handlePermissionEvent()`.
+- `src/core.ts`: pure helpers (redaction, grouping, status, markdown rendering, credential-permission classification) with no filesystem/OpenCode dependencies — unit tests target this module.
+- `src/store.ts`: filesystem writes and `ctx.storage` state (seen message IDs, session-folder map, last-interaction map). Record writes are exclusive (`wx`); existing files are never overwritten and numbers bump on collision. `appendToArchiveFile()` is used for `SECURITY-WARNINGS.md` (append-only).
 - `src/options.ts`: option parsing. Invalid values warn and fall back to defaults rather than throwing.
 - `ctx.storage` keys are namespaced `prompt-archive/*`; dedupe by message ID means state persists across runs, so clearing storage is required to re-record a session.
 - Subagent sessions follow `parentID` links and share the root session's folder (`resolveRoot`).
@@ -33,12 +33,13 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 - `ctx.event.subscribe({ types })` delivered no events on OpenCode 2.4.1. The plugin subscribes to all events and filters in the loop. Keep it that way unless verified against a newer version.
 - `session.idle` is unreliable for short CLI runs, hence `session.execution.succeeded` is also a trigger. A single turn can produce multiple result files sharing one prompt file.
 - `redactSecrets()` must run **before** `slugify()` strips punctuation — removing `=`/`:` first would defeat credential patterns and leak secrets into filenames (`core.ts` `slugify`).
-- Keep redaction applied to every content surface: prompt text, response text, reasoning, and filenames. Tests assert secrets never reach disk.
+- Keep redaction applied to every content surface: prompt text, response text, reasoning, filenames, `changed_files` paths, and warning text. Tests assert secrets never reach disk. PII (phone/SSN/card/email) is deliberately NOT detected — see `SECURITY.md`.
+- Credential-request warnings are opt-in (`warnOnCredentialPermission`, default false) and heuristic. Never write raw secret values into `SECURITY-WARNINGS.md`; the event does not carry them and `renderWarningEntry()` re-redacts. Warnings cannot detect pre-authorized reads.
 - File numbering is global serial work: keep updates going through the `enqueue()` promise chain in `index.ts`, otherwise two events can allocate the same number.
-- Writes use `wx`, never overwrite. Changing this breaks the "never overwrites" guarantee and the tests.
+- Record writes use `wx`, never overwrite. Changing this breaks the "never overwrites" guarantee and the tests. `SECURITY-WARNINGS.md` is the intentional exception: append-only via `appendToArchiveFile()`.
 
 ## Verification / release notes
 
 - Releases are tag-driven from `main`/`dev` pushes; version lives in `package.json`, tag must be `v<version>`.
 - `pack:check` output directory is hardcoded to `/private/var/folders/cv/z4kr2kj95jgb41tjvgrpy10w0000gp/T/opencode` (pre-created temp dir); `.gitignore` excludes `*.tgz`.
-- README is the user-facing source for options and behavior; keep it in sync when changing `src/options.ts` defaults or file naming.
+- README is the user-facing source for options and behavior; keep it in sync when changing `src/options.ts` defaults or file naming. `SECURITY.md` is the threat-model notice — keep it in sync when changing redaction patterns or warning heuristics.

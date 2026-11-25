@@ -292,3 +292,80 @@ export function renderResultFile(input: ResultFileInput): string {
   if (files.length) body.push("", "## Changed files", "", ...files.map((f) => `- ${f}`))
   return `${frontmatter(fields)}\n${body.join("\n")}\n`
 }
+
+/* -------------------------------------------------------------------------- */
+/* Credential-permission warnings                                             */
+/* -------------------------------------------------------------------------- */
+
+/** The subset of a `permission.asked` event used for credential detection. */
+export interface PermissionInput {
+  action: string
+  resources?: ReadonlyArray<string>
+  message?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface CredentialWarning {
+  /** Sanitized, human-readable reasons — never contains raw credential values. */
+  reasons: string[]
+}
+
+const CREDENTIAL_PATH = /(?:\.env(?:\.|$)|(?:^|\/)\.aws\/|(?:^|\/)\.ssh\/|credentials|(?:^|\/)secret|\btoken\b|password|\.pem$|\.key$|id_rsa|\.npmrc$|\.netrc$)/i
+const CREDENTIAL_ACTION = /(token|password|passwd|secret|credential|api[_-]?key|private[_-]?key|sign[_-]?in|\bauth\b)/i
+const CREDENTIAL_COMMAND = /(export\s+[a-z0-9_-]*(?:key|token|secret|password)[a-z0-9_-]*=|cat\s+[^\s]*(?:\.env|credentials|\.aws)|\$?(?:api[_-]?key|token|secret|password)\b)/i
+
+/**
+ * Heuristically decide whether a permission request looks credential-related.
+ * This is a warning signal, not a security guarantee — it inspects only action
+ * strings and resource paths carried by the event, never secret values, and
+ * cannot detect reads allowed without a permission prompt.
+ */
+export function classifyCredentialPermission(input: PermissionInput): CredentialWarning | undefined {
+  const reasons: string[] = []
+  const push = (value: string): void => {
+    const safe = redactSecrets(value)
+    if (!reasons.includes(safe)) reasons.push(safe)
+  }
+
+  for (const resource of input.resources ?? []) {
+    if (typeof resource === "string" && CREDENTIAL_PATH.test(resource)) {
+      push(`credential-like path: ${resource}`)
+    }
+  }
+  if (typeof input.action === "string" && CREDENTIAL_ACTION.test(input.action)) {
+    push(`credential-like action: ${input.action}`)
+  }
+  if (typeof input.message === "string") {
+    if (CREDENTIAL_ACTION.test(input.message)) push(`credential-like request: ${input.message}`)
+    if (CREDENTIAL_COMMAND.test(input.message)) push(`credential-like command: ${input.message}`)
+  }
+  if (input.metadata && typeof input.metadata === "object") {
+    for (const [key, value] of Object.entries(input.metadata)) {
+      if (CREDENTIAL_ACTION.test(key) && typeof value === "string") {
+        push(`credential-like metadata: ${key}`)
+      }
+    }
+  }
+
+  return reasons.length > 0 ? { reasons } : undefined
+}
+
+export interface WarningFileInput {
+  sessionID: string
+  timestamp: number
+  reasons: ReadonlyArray<string>
+  reply?: string
+}
+
+/** Render a sanitized warning entry for the shared SECURITY-WARNINGS.md file. */
+export function renderWarningEntry(input: WarningFileInput): string {
+  const iso = toIso(input.timestamp)
+  const lines = [
+    `## ${iso} — ${redactSecrets(input.sessionID)}`,
+    "",
+    ...input.reasons.map((reason) => `- ${redactSecrets(reason)}`),
+  ]
+  if (input.reply) lines.push("", `User reply: ${redactSecrets(input.reply)}`)
+  return `${lines.join("\n")}\n`
+}
+

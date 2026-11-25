@@ -15,6 +15,7 @@ test("options accept valid overrides", () => {
     includeChangedFiles: false,
     maxChangedFiles: 5,
     verbose: true,
+    warnOnCredentialPermission: true,
   })
   assert.equal(parsed.directory, "/tmp/archive")
   assert.equal(parsed.includeReasoning, true)
@@ -22,6 +23,7 @@ test("options accept valid overrides", () => {
   assert.equal(parsed.includeChangedFiles, false)
   assert.equal(parsed.maxChangedFiles, 5)
   assert.equal(parsed.verbose, true)
+  assert.equal(parsed.warnOnCredentialPermission, true)
 })
 
 test("invalid options fall back to defaults", () => {

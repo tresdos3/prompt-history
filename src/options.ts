@@ -13,6 +13,8 @@ export interface ArchiveOptions {
   includeChangedFiles: boolean
   maxChangedFiles: number
   verbose: boolean
+  /** Warn (stderr + archive) when a permission request looks credential-related. */
+  warnOnCredentialPermission: boolean
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -22,6 +24,7 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   includeChangedFiles: true,
   maxChangedFiles: 200,
   verbose: false,
+  warnOnCredentialPermission: false,
 }
 
 export function parseOptions(raw: unknown): ArchiveOptions {
@@ -36,7 +39,7 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     warnings.push("directory must be a non-empty string")
   }
 
-  for (const key of ["includeReasoning", "includeTools", "includeChangedFiles", "verbose"] as const) {
+  for (const key of ["includeReasoning", "includeTools", "includeChangedFiles", "verbose", "warnOnCredentialPermission"] as const) {
     const value = input[key]
     if (typeof value === "boolean") options[key] = value
     else if (value !== undefined) warnings.push(`${key} must be a boolean`)
