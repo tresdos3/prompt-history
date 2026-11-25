@@ -14,6 +14,7 @@ export interface ExportOptions {
   agent?: string
   status?: "complete" | "incomplete"
   text?: string
+  tag?: string
 }
 
 export interface ArchiveOptions {
@@ -50,6 +51,10 @@ export interface ArchiveOptions {
   retentionDays?: number
   /** Keep at most this many session folders, deleting the oldest first. */
   maxSessions?: number
+  /** Tags applied to every recorded session. */
+  autoTags?: string[]
+  /** Extract #hashtags from the session title and first prompt. */
+  tagFromTitle: boolean
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -67,6 +72,7 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   dryRun: false,
   includeTranscript: true,
   transcriptName: "TRANSCRIPT.md",
+  tagFromTitle: false,
 }
 
 /** Parse the optional export configuration. Invalid values are ignored with a warning. */
@@ -84,7 +90,7 @@ function parseExportOptions(raw: unknown, warnings: string[]): ExportOptions | u
   if (input.format !== undefined && input.format !== "md" && input.format !== "jsonl") {
     warnings.push("export.format must be 'md' or 'jsonl'")
   }
-  for (const key of ["dateFrom", "dateTo", "agent", "text"] as const) {
+  for (const key of ["dateFrom", "dateTo", "agent", "text", "tag"] as const) {
     if (typeof input[key] === "string") result[key] = input[key]
     else if (input[key] !== undefined) warnings.push(`export.${key} must be a string`)
   }
@@ -138,6 +144,15 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     warnings.push("maxParentDepth must be a finite number")
   }
 
+  if (Array.isArray(input.autoTags)) {
+    options.autoTags = input.autoTags
+      .filter((tag): tag is string => typeof tag === "string")
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+  } else if (input.autoTags !== undefined) {
+    warnings.push("autoTags must be an array of strings")
+  }
+
   for (const key of ["retentionDays", "maxSessions"] as const) {
     const value = input[key]
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -147,7 +162,7 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     }
   }
 
-  for (const key of ["includeTranscript"] as const) {
+  for (const key of ["includeTranscript", "tagFromTitle"] as const) {
     const value = input[key]
     if (typeof value === "boolean") options[key] = value
     else if (value !== undefined) warnings.push(`${key} must be a boolean`)

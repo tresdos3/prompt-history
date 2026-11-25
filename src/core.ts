@@ -106,6 +106,18 @@ export function toIso(ms: number): string {
   return Number.isFinite(date.getTime()) ? date.toISOString() : new Date(0).toISOString()
 }
 
+/** Extract #hashtags, normalizing them into safe lowercase tag names. */
+export function extractTags(text: string): string[] {
+  const found = new Set<string>()
+  for (const match of text.matchAll(/#([a-z][\w-]*)/gi)) {
+    const tag = redactSecrets(match[1])
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "")
+    if (tag) found.add(tag)
+  }
+  return [...found]
+}
+
 /** Replace `{{key}}` placeholders with values; unknown placeholders become empty. */
 export function applyTemplate(template: string, values: Readonly<Record<string, string>>): string {
   return template.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_match, key: string) => values[key] ?? "")
@@ -287,6 +299,7 @@ export interface ResultFileInput {
   maxChangedFiles?: number
   maxTextChars?: number
   template?: string
+  tags?: ReadonlyArray<string>
   gitBranch?: string
   gitCommit?: string
   /** True when a credential-related permission was flagged in this session. */
@@ -313,6 +326,9 @@ export function renderResultFile(input: ResultFileInput): string {
     ["outcome", input.outcome],
     ["changed_files", files],
   ]
+  if (input.tags && input.tags.length > 0) {
+    fields.push(["tags", input.tags.map((tag) => redactSecrets(tag))])
+  }
   if (input.gitBranch) fields.push(["git_branch", input.gitBranch])
   if (input.gitCommit) fields.push(["git_commit", input.gitCommit])
   if (input.securityWarning) fields.push(["security_warning", "true"])
@@ -375,6 +391,7 @@ export interface ExportEntry {
   responseText: string
   tools: string[]
   changedFiles: string[]
+  tags: string[]
 }
 
 /** Filters applied when rendering a consolidated export. */
@@ -397,6 +414,7 @@ export function filterExportEntries(entries: ReadonlyArray<ExportEntry>, filters
     if (filters.dateTo && date > filters.dateTo) return false
     if (filters.agent && !entry.agent.toLowerCase().includes(filters.agent.toLowerCase())) return false
     if (filters.status && entry.status !== filters.status) return false
+    if (filters.tag && !entry.tags.some((tag) => tag.toLowerCase() === filters.tag?.toLowerCase())) return false
     if (needle && !`${entry.promptText}\n${entry.responseText}`.toLowerCase().includes(needle)) return false
     return true
   })
@@ -421,6 +439,7 @@ export function renderExport(entries: ReadonlyArray<ExportEntry>, format: "md" |
             response: redactSecrets(entry.responseText),
             tools: entry.tools.map(redactSecrets),
             changed_files: entry.changedFiles.map(redactSecrets),
+            tags: entry.tags.map(redactSecrets),
           }),
         )
         .join("\n") + (selected.length ? "\n" : "")
@@ -431,6 +450,7 @@ export function renderExport(entries: ReadonlyArray<ExportEntry>, format: "md" |
     lines.push(`## ${redactSecrets(entry.agent)} — ${toIso(entry.timestamp)}`, "")
     lines.push(`- Interaction: \`${redactSecrets(entry.interactionID)}\``)
     lines.push(`- Status: ${entry.status} (${entry.outcome})`)
+    if (entry.tags.length) lines.push(`- Tags: ${entry.tags.map((tag) => `\`${redactSecrets(tag)}\``).join(", ")}`)
     lines.push(`- Prompt file: [${redactSecrets(entry.promptFile)}](./${redactSecrets(entry.promptFile)})`)
     lines.push("", "### Prompt", "", redactSecrets(entry.promptText), "", "### Response", "")
     lines.push(redactSecrets(entry.responseText) || "_No response recorded._")
@@ -442,7 +462,18 @@ export function renderExport(entries: ReadonlyArray<ExportEntry>, format: "md" |
 
 /** Render the archive root INDEX.md from persisted session entries. */
 export function renderIndex(
-  entries: Readonly<Record<string, { title: string; date: string; files: ReadonlyArray<string>; branch?: string }>>,
+  entries: Readonly<
+    Record<
+      string,
+      {
+        title: string
+        date: string
+        files: ReadonlyArray<string>
+        branch?: string
+        tags?: ReadonlyArray<string>
+      }
+    >
+  >,
 ): string {
   const lines = ["# Prompt archive index", ""]
   const folders = Object.keys(entries).sort()
@@ -452,6 +483,9 @@ export function renderIndex(
     lines.push(`## ${entry.title || folder}`, "")
     if (entry.date) lines.push(`- Date: ${entry.date}`)
     if (entry.branch) lines.push(`- Branch: \`${entry.branch}\``)
+    if (entry.tags?.length) {
+      lines.push(`- Tags: ${entry.tags.map((tag) => `\`${redactSecrets(tag)}\``).join(", ")}`)
+    }
     lines.push(`- Folder: [${folder}](./${folder}/)`)
     for (const file of entry.files) {
       lines.push(`- [${file}](./${folder}/${file})`)

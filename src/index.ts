@@ -13,6 +13,7 @@ import {
   classifyCredentialPermission,
   collectNewMessages,
   deriveStatus,
+  extractTags,
   groupInteractions,
   redactSecrets,
   responseText,
@@ -51,6 +52,7 @@ import {
   setFolderMap,
   setIndexEntry,
   setLastInteractions,
+  setTags,
   setSessionFlags,
   setSeen,
   writeArchiveFile,
@@ -149,6 +151,7 @@ function buildExportEntry(
   promptFile: string,
   promptText: string,
   responses: ReadonlyArray<HistoryMessage>,
+  tags: ReadonlyArray<string> = [],
 ): ExportEntry {
   return {
     interactionID,
@@ -162,6 +165,7 @@ function buildExportEntry(
     responseText: responses.map(responseText).filter(Boolean).join("\n\n"),
     tools: [...new Set(responses.flatMap(toolNames))],
     changedFiles: changedFiles(responses),
+    tags: [...tags],
   }
 }
 
@@ -189,6 +193,13 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
   }
   const securityWarning = flags.securityWarning === true
   const git = await readGitMetadata(ctx.location.directory)
+  const tags = [
+    ...new Set([
+      ...(options.autoTags ?? []),
+      ...(options.tagFromTitle ? [...extractTags(rootSession.title ?? ""), ...extractTags(firstPrompt)] : []),
+    ]),
+  ].map((tag) => redactSecrets(tag))
+  if (!options.dryRun) await setTags(ctx, sessionID, tags)
   const interactions = groupInteractions(fresh)
   const lastInteractions = await getLastInteractions(ctx)
   const lastUser = [...messages].reverse().find((m) => m.type === "user")
@@ -242,6 +253,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
           maxChangedFiles: options.maxChangedFiles,
           maxTextChars: options.maxTextChars,
           template: options.resultTemplate,
+          tags,
           gitBranch: git.branch,
           gitCommit: git.commit,
           securityWarning,
@@ -259,6 +271,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
           previous?.promptFile ?? "",
           "(continuation)",
           interaction.responses,
+          tags,
         ),
       )
       number += 1
@@ -310,6 +323,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
         maxChangedFiles: options.maxChangedFiles,
         maxTextChars: options.maxTextChars,
         template: options.resultTemplate,
+        tags,
         gitBranch: git.branch,
         gitCommit: git.commit,
         securityWarning,
@@ -327,6 +341,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
         promptFile,
         interaction.prompt.text ?? "",
         interaction.responses,
+        tags,
       ),
     )
     number += 1
@@ -349,6 +364,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
       branch: git.branch,
       sessionID,
       seenIDs: fresh.map((message) => message.id),
+      tags,
     })
     await writeArchiveFile(root, "INDEX.md", renderIndex(await getIndex(ctx)))
   }

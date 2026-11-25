@@ -138,7 +138,9 @@ Pass options in `opencode.json(c)`:
         "includeTranscript": true,
         "transcriptName": "TRANSCRIPT.md",
         "retentionDays": 90,
-        "maxSessions": 500
+        "maxSessions": 500,
+        "autoTags": ["work"],
+        "tagFromTitle": true
       }
     }
   ]
@@ -166,6 +168,8 @@ Pass options in `opencode.json(c)`:
 | `transcriptName` | string | `TRANSCRIPT.md` | Override the transcript filename. |
 | `retentionDays` | number | unset | Delete session folders older than this many days. |
 | `maxSessions` | number | unset | Keep at most this many session folders, deleting the oldest first. |
+| `autoTags` | string[] | unset | Tags applied to every recorded session. |
+| `tagFromTitle` | boolean | `false` | Extract `#hashtags` from the session title and first prompt. |
 
 ### Custom templates
 
@@ -176,6 +180,10 @@ Pass options in `opencode.json(c)`:
 Set `export` to generate a single file containing every recorded interaction, filtered by `dateFrom` / `dateTo` (YYYY-MM-DD), `agent` (substring), `status` (`complete` or `incomplete`), and `text` (case-insensitive substring of prompt or response). `format` is `md` (default) or `jsonl`; `outFile` defaults to `ARCHIVE.md`. The file is regenerated after each session, so filter changes on reload take effect immediately. All content is redacted before writing.
 
 An `INDEX.md` in the archive root lists every recorded session with links to its prompt and result files. It is regenerated after each session; session records themselves are never overwritten.
+
+### Tags
+
+Tags appear as a `tags:` frontmatter array on result files and in `INDEX.md`. Use `autoTags` for fixed labels and `tagFromTitle: true` to pull `#hashtags` from the session title or first prompt (numeric-only hashtags are ignored). Add `tag` to the `export` filter to produce a tag-specific archive.
 
 ### Retention
 

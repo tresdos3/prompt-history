@@ -8,6 +8,7 @@ import {
   filterExportEntries,
   groupInteractions,
   deriveStatus,
+  extractTags,
   redactSecrets,
   renderExport,
   type ExportEntry,
@@ -304,6 +305,34 @@ test("result frontmatter records git branch and commit when available", () => {
   assert.doesNotMatch(plain, /git_branch/)
 })
 
+test("result frontmatter includes tags when provided", () => {
+  const rendered = renderResultFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    promptFile: "01-prompt.md",
+    timestamp: 1,
+    status: "complete",
+    outcome: "succeeded",
+    responses: [],
+    tags: ["backend", "login"],
+  })
+  assert.match(rendered, /tags:\n  - "backend"\n  - "login"/)
+  const plain = renderResultFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    promptFile: "01-prompt.md",
+    timestamp: 1,
+    status: "complete",
+    outcome: "succeeded",
+    responses: [],
+  })
+  assert.doesNotMatch(plain, /tags:/)
+})
+
 test("result files carry a security warning flag when requested", () => {
   const base = {
     interactionID: "ses::msg",
@@ -480,6 +509,7 @@ const EXPORT_SAMPLE: ExportEntry[] = [
     responseText: "Done. API_KEY=sk-fake1234567890",
     tools: ["bash"],
     changedFiles: ["src/app.ts"],
+    tags: ["login"],
   },
   {
     interactionID: "ses::msg2",
@@ -493,6 +523,7 @@ const EXPORT_SAMPLE: ExportEntry[] = [
     responseText: "Stopped.",
     tools: [],
     changedFiles: [],
+    tags: [],
   },
 ]
 
@@ -514,7 +545,17 @@ test("export filters combine date, agent, status, and text", () => {
     filterExportEntries(EXPORT_SAMPLE, { text: "login" }).map((e) => e.interactionID),
     ["ses::msg1"],
   )
+  assert.deepEqual(
+    filterExportEntries(EXPORT_SAMPLE, { tag: "login" }).map((e) => e.interactionID),
+    ["ses::msg1"],
+  )
   assert.equal(filterExportEntries(EXPORT_SAMPLE, { text: "missing" }).length, 0)
+})
+
+test("hashtags are extracted and normalized into safe tags", () => {
+  assert.deepEqual(extractTags("Fix #LoginForm and #auth-flow, ignore #123bad"), ["loginform", "auth-flow"])
+  assert.deepEqual(extractTags("no tags here"), [])
+  assert.deepEqual(extractTags("#sk-fake1234567890"), ["redacted"])
 })
 
 test("export renderers redact secrets in both formats", () => {

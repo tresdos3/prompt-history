@@ -134,6 +134,27 @@ test("INDEX.md links the recorded session and its files", async () => {
   }
 })
 
+test("auto tags and hashtags reach frontmatter and INDEX.md", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
+  try {
+    const { ctx } = fakeCtx({
+      messages: [msg("msg_1", { text: "Add #LoginForm today" })],
+    })
+    const options = { ...DEFAULT_OPTIONS, autoTags: ["project-x"], tagFromTitle: true }
+    await processSession(ctx, options, base, "ses_1", "succeeded")
+    const folders = await sessionFolders(base)
+    const resultFile = (await readdir(path.join(base, folders[0]))).find((f) => f.endsWith("-result.md"))
+    assert.ok(resultFile)
+    const result = await readFile(path.join(base, folders[0], resultFile), "utf8")
+    assert.match(result, /- "project-x"/)
+    assert.match(result, /- "loginform"/)
+    const index = await readFile(path.join(base, "INDEX.md"), "utf8")
+    assert.match(index, /Tags: `project-x`, `loginform`/)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
 test("TRANSCRIPT.md is written in each session folder", async () => {
   const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
   try {

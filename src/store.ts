@@ -19,6 +19,7 @@ const FLAGS_KEY = "prompt-archive/session-flags"
 const INDEX_KEY = "prompt-archive/index"
 const EXPORT_KEY = "prompt-archive/export-entries"
 const TRANSCRIPT_KEY = "prompt-archive/transcripts"
+const TAGS_KEY = "prompt-archive/tags"
 
 export interface LastInteraction {
   interactionID: string
@@ -41,6 +42,7 @@ export interface IndexEntry {
   branch?: string
   sessionID?: string
   seenIDs?: string[]
+  tags?: string[]
 }
 
 /** Local git metadata, read from .git files only — no shell or child processes. */
@@ -133,10 +135,35 @@ export async function getIndex(ctx: Ctx): Promise<Record<string, IndexEntry>> {
         ...(Array.isArray(record.seenIDs) && record.seenIDs.every((id) => typeof id === "string")
           ? { seenIDs: record.seenIDs as string[] }
           : {}),
+        ...(Array.isArray(record.tags) && record.tags.every((tag) => typeof tag === "string") ? { tags: record.tags as string[] } : {}),
       }
     }
   }
   return result
+}
+
+export async function getTags(ctx: Ctx): Promise<Record<string, string[]>> {
+  const raw = await ctx.storage.get(TAGS_KEY)
+  let value: unknown = raw
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      return {}
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const result: Record<string, string[]> = {}
+  for (const [key, tags] of Object.entries(value)) {
+    if (Array.isArray(tags) && tags.every((tag) => typeof tag === "string")) result[key] = tags
+  }
+  return result
+}
+
+export async function setTags(ctx: Ctx, sessionID: string, tags: ReadonlyArray<string>): Promise<void> {
+  const all = await getTags(ctx)
+  all[sessionID] = [...new Set(tags)]
+  await ctx.storage.set(TAGS_KEY, JSON.stringify(all))
 }
 
 export async function getTranscripts(ctx: Ctx): Promise<Record<string, TranscriptEntry[]>> {
@@ -200,6 +227,7 @@ export async function setIndexEntry(ctx: Ctx, folder: string, entry: IndexEntry)
     ...(entry.branch || previous?.branch ? { branch: entry.branch || previous?.branch } : {}),
     ...(entry.sessionID || previous?.sessionID ? { sessionID: entry.sessionID || previous?.sessionID } : {}),
     ...(entry.seenIDs || previous?.seenIDs ? { seenIDs: [...new Set([...(previous?.seenIDs ?? []), ...(entry.seenIDs ?? [])])] } : {}),
+    ...(entry.tags || previous?.tags ? { tags: [...new Set([...(previous?.tags ?? []), ...(entry.tags ?? [])])] } : {}),
   }
   await ctx.storage.set(INDEX_KEY, JSON.stringify(all))
 }
@@ -421,6 +449,10 @@ export async function pruneOldSessions(
   const last = await getLastInteractions(ctx)
   for (const id of removedSessionIDs) delete last[id]
   await ctx.storage.set(LAST_KEY, JSON.stringify(last))
+
+  const tags = await getTags(ctx)
+  for (const id of removedSessionIDs) delete tags[id]
+  await ctx.storage.set(TAGS_KEY, JSON.stringify(tags))
 
   const transcripts = await getTranscripts(ctx)
   for (const folder of victims) delete transcripts[folder]
