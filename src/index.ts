@@ -62,12 +62,7 @@ interface SessionLike {
  * - The `types` option of `event.subscribe` delivered no events in this
  *   version, so filtering is done explicitly below.
  */
-const WATCHED_EVENTS = [
-  "session.execution.succeeded",
-  "session.execution.failed",
-  "session.execution.interrupted",
-  "session.idle",
-] as const
+const WATCHED_EVENTS = ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted", "session.idle"] as const
 
 /** Serialize processing so two events cannot allocate the same file numbers. */
 let queue: Promise<unknown> = Promise.resolve()
@@ -84,11 +79,7 @@ function outcomeFor(eventType: string): Outcome {
 }
 
 /** Follow parentID links so subagent sessions share their root session's folder. */
-async function resolveRoot(
-  ctx: Ctx,
-  session: SessionLike,
-  maxDepth: number,
-): Promise<SessionLike> {
+async function resolveRoot(ctx: Ctx, session: SessionLike, maxDepth: number): Promise<SessionLike> {
   let current = session
   const visited = new Set<string>([current.id])
   for (let depth = 0; depth < maxDepth && current.parentID; depth += 1) {
@@ -117,20 +108,16 @@ async function ensureFolder(
   const seed = rootSession.title || firstPrompt || rootSession.id
   const date = new Date().toISOString().slice(0, 10)
   const datePrefix = options.datePrefix ? `${date}-` : ""
-  const folder = await createSessionFolder(root, slugify(redactSecrets(seed), 8, 64), datePrefix)
-  folders[rootSession.id] = folder.name
-  await setFolderMap(ctx, folders)
+  const folder = await createSessionFolder(root, slugify(redactSecrets(seed), 8, 64), datePrefix, options.dryRun)
+  if (!options.dryRun) {
+    folders[rootSession.id] = folder.name
+    await setFolderMap(ctx, folders)
+  }
   return folder
 }
 
 /** Exported for integration tests; drives one session from an event trigger. */
-export async function processSession(
-  ctx: Ctx,
-  options: ArchiveOptions,
-  root: string,
-  sessionID: string,
-  hint: Outcome,
-): Promise<void> {
+export async function processSession(ctx: Ctx, options: ArchiveOptions, root: string, sessionID: string, hint: Outcome): Promise<void> {
   const session = (await ctx.session.get({ sessionID })) as unknown as SessionLike
   const messages = (await ctx.session.context({ sessionID })) as unknown as HistoryMessage[]
   const seen = new Set(await getSeen(ctx))
@@ -151,9 +138,26 @@ export async function processSession(
   const lastUser = [...messages].reverse().find((m) => m.type === "user")
   let number = highestNumber(await readDirNames(folder.path), /^(\d{2})-/) + 1
 
+  if (options.dryRun) {
+    console.log(`[prompt-archive] dry run: ${folder.name} — ${interactions.length} interaction(s)`)
+    let planned = number
+    for (const interaction of interactions) {
+      const agent = interaction.responses.find((r) => !!r.agent)?.agent ?? session.agent ?? "assistant"
+      if (interaction.prompt.id.startsWith("orphan:")) {
+        console.log(`[prompt-archive] would write ${String(planned).padStart(2, "0")}-${slugify(agent, 4, 32)}-result.md`)
+        planned += 1
+        continue
+      }
+      const title = slugify(redactSecrets(interaction.prompt.text || "prompt"))
+      console.log(`[prompt-archive] would write ${String(planned).padStart(2, "0")}-${title}-prompt.md`)
+      console.log(`[prompt-archive] would write ${String(planned + 1).padStart(2, "0")}-${slugify(agent, 4, 32)}-result.md`)
+      planned += 2
+    }
+    return
+  }
+
   for (const interaction of interactions) {
-    const agent =
-      interaction.responses.find((r) => !!r.agent)?.agent ?? session.agent ?? "assistant"
+    const agent = interaction.responses.find((r) => !!r.agent)?.agent ?? session.agent ?? "assistant"
     const lastResponse = interaction.responses[interaction.responses.length - 1]
     const isContinuation = interaction.prompt.id.startsWith("orphan:")
     const previous = lastInteractions[sessionID]
@@ -161,8 +165,7 @@ export async function processSession(
     if (isContinuation) {
       // A later step of an already recorded turn: add another result file that
       // points at the original prompt instead of inventing a new prompt.
-      const interactionID =
-        previous?.interactionID ?? (lastUser ? `${sessionID}::${lastUser.id}` : `${sessionID}::unknown`)
+      const interactionID = previous?.interactionID ?? (lastUser ? `${sessionID}::${lastUser.id}` : `${sessionID}::unknown`)
       const resultFile = await writeNumbered(
         folder.path,
         number,
@@ -296,6 +299,7 @@ async function handlePermissionEvent(
   root: string,
   event: { type: string; data?: Record<string, unknown> },
   warn: boolean,
+  dryRun: boolean,
 ): Promise<void> {
   const data = event.data ?? {}
   const now = Date.now()
@@ -308,29 +312,22 @@ async function handlePermissionEvent(
     const warning = warn
       ? classifyCredentialPermission({
           action: typeof data.action === "string" ? data.action : "",
-          resources: Array.isArray(data.resources)
-            ? data.resources.filter((r): r is string => typeof r === "string")
-            : [],
+          resources: Array.isArray(data.resources) ? data.resources.filter((r): r is string => typeof r === "string") : [],
           message: typeof data.message === "string" ? data.message : undefined,
-          metadata: data.metadata && typeof data.metadata === "object"
-            ? (data.metadata as Record<string, unknown>)
-            : undefined,
+          metadata: data.metadata && typeof data.metadata === "object" ? (data.metadata as Record<string, unknown>) : undefined,
         })
       : undefined
     if (typeof data.id === "string") {
       pendingPermissions.set(data.id, { sessionID, at: now, flagged: warning !== undefined })
     }
     if (!warning) return
-    await setSessionFlags(ctx, sessionID, { securityWarning: true })
+    if (!dryRun) await setSessionFlags(ctx, sessionID, { securityWarning: true })
     const reasons = warning.reasons
     console.warn(
       `[prompt-archive] credential-related permission requested in ${redactSecrets(sessionID)}: ${redactSecrets(reasons.join("; "))}`,
     )
-    await appendToArchiveFile(
-      root,
-      "SECURITY-WARNINGS.md",
-      renderWarningEntry({ sessionID, timestamp: now, reasons }),
-    )
+    if (dryRun) return
+    await appendToArchiveFile(root, "SECURITY-WARNINGS.md", renderWarningEntry({ sessionID, timestamp: now, reasons }))
     return
   }
 
@@ -340,13 +337,11 @@ async function handlePermissionEvent(
     if (!pending) return
     pendingPermissions.delete(requestID)
     const reply = typeof data.reply === "string" ? data.reply : ""
-    if (reply === "reject") {
+    if (reply === "reject" && !dryRun) {
       await setSessionFlags(ctx, pending.sessionID, { permissionRejected: true })
     }
     if (!pending.flagged) return
-    console.warn(
-      `[prompt-archive] permission reply for ${redactSecrets(pending.sessionID)}: ${redactSecrets(reply)}`,
-    )
+    console.warn(`[prompt-archive] permission reply for ${redactSecrets(pending.sessionID)}: ${redactSecrets(reply)}`)
     await appendToArchiveFile(
       root,
       "SECURITY-WARNINGS.md",
@@ -374,7 +369,7 @@ const plugin = Plugin.define({
         if (event.type === "permission.asked" || event.type === "permission.replied") {
           await enqueue(async () => {
             try {
-              await handlePermissionEvent(ctx, root, event, options.warnOnCredentialPermission)
+              await handlePermissionEvent(ctx, root, event, options.warnOnCredentialPermission, options.dryRun)
             } catch (error) {
               console.error("[prompt-archive] failed to handle permission event", event.type, error)
             }

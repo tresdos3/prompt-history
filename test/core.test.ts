@@ -157,13 +157,15 @@ test("reasoning is opt-in and finite changed-file limits are respected", () => {
 })
 
 test("duplicate prevention skips already recorded messages", () => {
-  const messages = [
-    message({ id: "msg-1" }),
-    message({ id: "msg-2", type: "assistant" }),
-    message({ id: "msg-3" }),
-  ]
-  assert.deepEqual(collectNewMessages(messages, new Set()).map((m) => m.id), ["msg-1", "msg-2", "msg-3"])
-  assert.deepEqual(collectNewMessages(messages, new Set(["msg-1", "msg-2"])).map((m) => m.id), ["msg-3"])
+  const messages = [message({ id: "msg-1" }), message({ id: "msg-2", type: "assistant" }), message({ id: "msg-3" })]
+  assert.deepEqual(
+    collectNewMessages(messages, new Set()).map((m) => m.id),
+    ["msg-1", "msg-2", "msg-3"],
+  )
+  assert.deepEqual(
+    collectNewMessages(messages, new Set(["msg-1", "msg-2"])).map((m) => m.id),
+    ["msg-3"],
+  )
 })
 
 test("interactions pair prompts with their assistant responses", () => {
@@ -176,8 +178,14 @@ test("interactions pair prompts with their assistant responses", () => {
   ]
   const groups = groupInteractions(messages)
   assert.equal(groups.length, 2)
-  assert.deepEqual(groups[0].responses.map((m) => m.id), ["msg-2", "msg-3"])
-  assert.deepEqual(groups[1].responses.map((m) => m.id), ["msg-5"])
+  assert.deepEqual(
+    groups[0].responses.map((m) => m.id),
+    ["msg-2", "msg-3"],
+  )
+  assert.deepEqual(
+    groups[1].responses.map((m) => m.id),
+    ["msg-5"],
+  )
 })
 
 test("interrupted executions are marked incomplete", () => {
@@ -276,12 +284,7 @@ test("credential-bearing file paths never reach the archive", () => {
       ],
     },
   })
-  assert.deepEqual(changedFiles([assistant]), [
-    "src/app.ts",
-    "src/lib.ts",
-    "src/tokenizer/index.ts",
-    "src/auth/password-reset.ts",
-  ])
+  assert.deepEqual(changedFiles([assistant]), ["src/app.ts", "src/lib.ts", "src/tokenizer/index.ts", "src/auth/password-reset.ts"])
 })
 
 test("fake credentials never appear in rendered prompt or result files", () => {

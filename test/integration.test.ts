@@ -18,15 +18,21 @@ function fakeCtx({ messages, session = {} }: FakeCtxOptions) {
   const data = new Map<string, unknown>()
   const ctx = {
     storage: {
-      async get(key: string) { return data.get(key) },
-      async set(key: string, value: unknown) { data.set(key, value) },
+      async get(key: string) {
+        return data.get(key)
+      },
+      async set(key: string, value: unknown) {
+        data.set(key, value)
+      },
     },
     session: {
       async get({ sessionID }: { sessionID: string }) {
         if (sessionID === "ses_root") return { id: "ses_root", agent: "build" }
         return { id: sessionID, agent: "build", ...session }
       },
-      async context() { return messages },
+      async context() {
+        return messages
+      },
     },
   }
   return { ctx: ctx as never, data }
@@ -45,10 +51,7 @@ test("event pipeline writes a prompt/result pair in a numbered session folder", 
   const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
   try {
     const { ctx } = fakeCtx({
-      messages: [
-        msg("msg_1", { text: "Add login form" }),
-        msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Done." }] }),
-      ],
+      messages: [msg("msg_1", { text: "Add login form" }), msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Done." }] })],
     })
     await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
     const folders = await sessionFolders(base)
@@ -90,10 +93,7 @@ test("INDEX.md links the recorded session and its files", async () => {
   const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
   try {
     const { ctx } = fakeCtx({
-      messages: [
-        msg("msg_1", { text: "Add login form" }),
-        msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Done." }] }),
-      ],
+      messages: [msg("msg_1", { text: "Add login form" }), msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Done." }] })],
     })
     await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
     const index = await readFile(path.join(base, "INDEX.md"), "utf8")
@@ -121,6 +121,27 @@ test("force re-records already seen messages", async () => {
   }
 })
 
+test("dryRun logs planned files without writing anything", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
+  const logs: string[] = []
+  const original = console.log
+  console.log = (...args: unknown[]) => {
+    logs.push(args.join(" "))
+  }
+  try {
+    const { ctx } = fakeCtx({
+      messages: [msg("msg_1", { text: "Add login form" }), msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Done." }] })],
+    })
+    await processSession(ctx, { ...DEFAULT_OPTIONS, dryRun: true }, base, "ses_1", "succeeded")
+    assert.deepEqual(await readdir(base), [])
+    assert.ok(logs.some((line) => line.includes("would write")))
+    assert.ok(logs.some((line) => line.includes("01-add-login-form-prompt.md")))
+  } finally {
+    console.log = original
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
 test("datePrefix adds a date to new session folder names", async () => {
   const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
   try {
@@ -137,14 +158,14 @@ test("a rejected permission flag produces a failed result with a warning marker"
   const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
   try {
     const { ctx, data } = fakeCtx({
-      messages: [
-        msg("msg_1", { text: "Read config" }),
-        msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Stopped." }] }),
-      ],
+      messages: [msg("msg_1", { text: "Read config" }), msg("msg_2", { type: "assistant", content: [{ type: "text", text: "Stopped." }] })],
     })
-    data.set("prompt-archive/session-flags", JSON.stringify({
-      ses_1: { securityWarning: true, permissionRejected: true },
-    }))
+    data.set(
+      "prompt-archive/session-flags",
+      JSON.stringify({
+        ses_1: { securityWarning: true, permissionRejected: true },
+      }),
+    )
     await processSession(ctx, DEFAULT_OPTIONS, base, "ses_1", "succeeded")
     const folders = await sessionFolders(base)
     const resultFile = (await readdir(path.join(base, folders[0]))).find((f) => f.endsWith("-result.md"))

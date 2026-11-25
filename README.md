@@ -116,7 +116,8 @@ Pass options in `opencode.json(c)`:
         "warnOnCredentialPermission": false,
         "force": false,
         "datePrefix": false,
-        "maxParentDepth": 32
+        "maxParentDepth": 32,
+        "dryRun": false
       }
     }
   ]
@@ -136,6 +137,7 @@ Pass options in `opencode.json(c)`:
 | `force` | boolean | `false` | Re-record messages even if their IDs were already seen. Useful after deleting an archive file. |
 | `datePrefix` | boolean | `false` | Name new session folders `YYYY-MM-DD-NNNN-<title>` for chronological sorting. |
 | `maxParentDepth` | number | `32` | Maximum `parentID` hops when resolving a subagent's root session. |
+| `dryRun` | boolean | `false` | Log the files that would be written without creating or modifying anything. |
 
 An `INDEX.md` in the archive root lists every recorded session with links to its prompt and result files. It is regenerated after each session; session records themselves are never overwritten.
 
@@ -189,10 +191,11 @@ Tested with **OpenCode 2.4.1**. The plugin uses the V2 server plugin API (`@open
 pnpm install
 pnpm test
 pnpm run typecheck
+pnpm run format:check
 pnpm run pack:check
 ```
 
-Tests use Node's built-in runner and Node's TypeScript stripping (Node 24 recommended). No test framework is needed.
+Tests use Node's built-in runner and Node's TypeScript stripping (Node 24 recommended). No test framework is needed. `pack:check` writes the tarball to `$PACK_DEST` (defaults to a local temp dir); `pnpm run format` applies the Prettier config.
 
 ## License
 

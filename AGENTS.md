@@ -9,14 +9,15 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 - `pnpm install` (pnpm 12 in CI; lockfile is `pnpm-lock.yaml`).
 - `pnpm test` — Node's built-in test runner (`node --test`), no test framework. `pnpm run test:root` runs only `test/*.test.ts`. Tests: `core.test.ts` (pure helpers), `options.test.ts`, `store.test.ts` (temp-dir filesystem/collision logic), `integration.test.ts` (mocked ctx through `processSession()`).
 - `pnpm run typecheck` — `tsc --noEmit`.
-- `pnpm run pack:check` — `pnpm pack` to the pre-created OpenCode temp dir; verifies the published tarball.
-- CI order: `pnpm install --frozen-lockfile` → `pnpm test` → `pnpm run typecheck` → `pnpm pack`. Release (`v*` tags) adds a check that the tag matches `package.json` version, then `pnpm publish --provenance`.
+- `pnpm run format:check` — Prettier on `src/**/*.ts` and `test/**/*.ts` (config `.prettierrc.json`: no semicolons, double quotes, printWidth 140). `pnpm run format` applies it.
+- `pnpm run pack:check` — `pnpm pack` to `$PACK_DEST`; defaults to the pre-created OpenCode temp dir. CI sets `PACK_DEST=.` so the same script produces the uploaded artifact.
+- CI order: `pnpm install --frozen-lockfile` → `pnpm test` → `pnpm run typecheck` → `pnpm run format:check` → `pnpm run pack:check`. Release (`v*` tags) adds a check that the tag matches `package.json` version, then `pnpm publish --provenance`.
 
 ## Toolchain quirks
 
 - Tests rely on Node's native TS stripping (`import` of `../src/core.ts` with extension). Node 24 is used in CI, 22.6+ is the declared minimum; prefer Node 24 locally.
 - `tsconfig.json` uses `NodeNext`, `verbatimModuleSyntax: true`, and `allowImportingTsExtensions: true` — imports between `src/` files must include the `.ts` extension and use `import type` for type-only imports.
-- No lint or formatter config exists; do not assume one.
+- Prettier is the only formatter; run `pnpm run format` after editing TypeScript. CI enforces `format:check`.
 
 ## Architecture / execution flow
 
@@ -44,5 +45,5 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 ## Verification / release notes
 
 - Releases are tag-driven from `main`/`dev` pushes; version lives in `package.json`, tag must be `v<version>`.
-- `pack:check` output directory is hardcoded to `/private/var/folders/cv/z4kr2kj95jgb41tjvgrpy10w0000gp/T/opencode` (pre-created temp dir); `.gitignore` excludes `*.tgz`.
+- `pack:check` output defaults to `/private/var/folders/cv/z4kr2kj95jgb41tjvgrpy10w0000gp/T/opencode` (pre-created temp dir) and is overridable with `PACK_DEST`; `.gitignore` excludes `*.tgz`.
 - README is the user-facing source for options and behavior; keep it in sync when changing `src/options.ts` defaults or file naming. `SECURITY.md` is the threat-model notice — keep it in sync when changing redaction patterns or warning heuristics.

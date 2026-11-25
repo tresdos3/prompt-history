@@ -23,6 +23,8 @@ export interface ArchiveOptions {
   datePrefix: boolean
   /** Maximum parentID hops when resolving a subagent's root session. */
   maxParentDepth: number
+  /** Log what would be written without creating or modifying files. */
+  dryRun: boolean
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -37,6 +39,7 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   force: false,
   datePrefix: false,
   maxParentDepth: 32,
+  dryRun: false,
 }
 
 export function parseOptions(raw: unknown): ArchiveOptions {
@@ -51,7 +54,16 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     warnings.push("directory must be a non-empty string")
   }
 
-  for (const key of ["includeReasoning", "includeTools", "includeChangedFiles", "verbose", "warnOnCredentialPermission", "force", "datePrefix"] as const) {
+  for (const key of [
+    "includeReasoning",
+    "includeTools",
+    "includeChangedFiles",
+    "verbose",
+    "warnOnCredentialPermission",
+    "force",
+    "datePrefix",
+    "dryRun",
+  ] as const) {
     const value = input[key]
     if (typeof value === "boolean") options[key] = value
     else if (value !== undefined) warnings.push(`${key} must be a boolean`)

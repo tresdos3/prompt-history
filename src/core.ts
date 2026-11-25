@@ -114,13 +114,8 @@ export function truncateText(value: string, maxChars: number): string {
 }
 
 /** Return only user/assistant messages that have not been recorded yet. */
-export function collectNewMessages(
-  messages: ReadonlyArray<HistoryMessage>,
-  seen: ReadonlySet<string>,
-): HistoryMessage[] {
-  return messages.filter(
-    (m) => (m.type === "user" || m.type === "assistant") && !!m.id && !seen.has(m.id),
-  )
+export function collectNewMessages(messages: ReadonlyArray<HistoryMessage>, seen: ReadonlySet<string>): HistoryMessage[] {
+  return messages.filter((m) => (m.type === "user" || m.type === "assistant") && !!m.id && !seen.has(m.id))
 }
 
 /** Pair each user prompt with the assistant messages that follow it. */
@@ -165,9 +160,7 @@ export function reasoningText(message: HistoryMessage): string {
 }
 
 export function toolNames(message: HistoryMessage): string[] {
-  return (message.content ?? [])
-    .filter((part) => part.type === "tool" && typeof part.name === "string")
-    .map((part) => part.name as string)
+  return (message.content ?? []).filter((part) => part.type === "tool" && typeof part.name === "string").map((part) => part.name as string)
 }
 
 const IGNORED_CHANGE = /(^|\/)(node_modules|\.git)\//
@@ -176,14 +169,14 @@ const IGNORED_CHANGE = /(^|\/)(node_modules|\.git)\//
  * Credential-bearing path components. Matched whole, so ordinary files such as
  * `src/tokenizer/index.ts` or `src/auth/password-reset.ts` are not discarded.
  */
-const SECRET_PATH_COMPONENT = /^(?:\.env[^/]*|(?:(?:[a-z0-9]+[-_])?(?:credentials|secrets?|tokens?|passwords?)(?:\.(?:txt|json|ya?ml|env|key|pem))?)|(?:\.aws|\.ssh|\.npmrc|\.netrc|\.htpasswd|id_rsa|id_ed25519))$/i
+const SECRET_PATH_COMPONENT =
+  /^(?:\.env[^/]*|(?:(?:[a-z0-9]+[-_])?(?:credentials|secrets?|tokens?|passwords?)(?:\.(?:txt|json|ya?ml|env|key|pem))?)|(?:\.aws|\.ssh|\.npmrc|\.netrc|\.htpasswd|id_rsa|id_ed25519))$/i
 const SECRET_PATH_EXT = /\.(?:pem|key|p12|pfx)$/i
 
 /** True when a path looks like it holds credentials. Exported for tests. */
 export function isSecretPath(file: string): boolean {
   const normalized = file.replace(/\\/g, "/")
-  return normalized.split("/").some((part) => SECRET_PATH_COMPONENT.test(part)) ||
-    SECRET_PATH_EXT.test(normalized)
+  return normalized.split("/").some((part) => SECRET_PATH_COMPONENT.test(part)) || SECRET_PATH_EXT.test(normalized)
 }
 
 /**
@@ -191,19 +184,11 @@ export function isSecretPath(file: string): boolean {
  * Dependency/VCS internals and credential-bearing paths are omitted so the
  * frontmatter stays readable and cannot disclose where secrets live.
  */
-export function changedFiles(
-  responses: ReadonlyArray<HistoryMessage>,
-  maxFiles = 200,
-): string[] {
+export function changedFiles(responses: ReadonlyArray<HistoryMessage>, maxFiles = 200): string[] {
   const files = new Set<string>()
   for (const response of responses) {
     for (const file of response.snapshot?.files ?? []) {
-      if (
-        typeof file === "string" &&
-        file.length > 0 &&
-        !IGNORED_CHANGE.test(file) &&
-        !isSecretPath(file)
-      ) {
+      if (typeof file === "string" && file.length > 0 && !IGNORED_CHANGE.test(file) && !isSecretPath(file)) {
         files.add(redactSecrets(file))
       }
     }
@@ -221,11 +206,7 @@ export function deriveStatus(
   const lastIdle = [...messages].reverse().find((m) => m.type === "idle")
   if (lastIdle?.outcome === "failed" || lastIdle?.outcome === "interrupted") {
     outcome = lastIdle.outcome
-  } else if (
-    messages.some(
-      (m) => m.type === "assistant" && (m.error !== undefined || m.finish === "error"),
-    )
-  ) {
+  } else if (messages.some((m) => m.type === "assistant" && (m.error !== undefined || m.finish === "error"))) {
     outcome = "failed"
   }
   // An explicitly rejected permission ends the turn as a failure, even when the
@@ -237,9 +218,7 @@ export function deriveStatus(
 function frontmatter(fields: ReadonlyArray<readonly [string, string | ReadonlyArray<string>]>): string {
   const lines = fields.map(([key, value]) => {
     if (Array.isArray(value)) {
-      return value.length === 0
-        ? `${key}: []`
-        : `${key}:\n${value.map((item) => `  - ${JSON.stringify(item)}`).join("\n")}`
+      return value.length === 0 ? `${key}: []` : `${key}:\n${value.map((item) => `  - ${JSON.stringify(item)}`).join("\n")}`
     }
     return `${key}: ${JSON.stringify(value)}`
   })
@@ -315,11 +294,7 @@ export function renderResultFile(input: ResultFileInput): string {
     ["changed_files", files],
   ]
   if (input.securityWarning) fields.push(["security_warning", "true"])
-  const body = [
-    `# Result — ${input.agent}`,
-    "",
-    text || "_No assistant response was recorded for this interaction._",
-  ]
+  const body = [`# Result — ${input.agent}`, "", text || "_No assistant response was recorded for this interaction._"]
   if (reasoning) body.push("", "## Reasoning", "", reasoning)
   if (tools.length) body.push("", "## Tools used", "", ...tools.map((t) => `- ${t}`))
   if (files.length) body.push("", "## Changed files", "", ...files.map((f) => `- ${f}`))
@@ -327,9 +302,7 @@ export function renderResultFile(input: ResultFileInput): string {
 }
 
 /** Render the archive root INDEX.md from persisted session entries. */
-export function renderIndex(
-  entries: Readonly<Record<string, { title: string; date: string; files: ReadonlyArray<string> }>>,
-): string {
+export function renderIndex(entries: Readonly<Record<string, { title: string; date: string; files: ReadonlyArray<string> }>>): string {
   const lines = ["# Prompt archive index", ""]
   const folders = Object.keys(entries).sort()
   if (folders.length === 0) lines.push("_No sessions recorded yet._")
@@ -363,9 +336,11 @@ export interface CredentialWarning {
   reasons: string[]
 }
 
-const CREDENTIAL_PATH = /(?:\.env(?:\.|$)|(?:^|\/)\.aws\/|(?:^|\/)\.ssh\/|credentials|(?:^|\/)secret|\btoken\b|password|\.pem$|\.key$|id_rsa|\.npmrc$|\.netrc$)/i
+const CREDENTIAL_PATH =
+  /(?:\.env(?:\.|$)|(?:^|\/)\.aws\/|(?:^|\/)\.ssh\/|credentials|(?:^|\/)secret|\btoken\b|password|\.pem$|\.key$|id_rsa|\.npmrc$|\.netrc$)/i
 const CREDENTIAL_ACTION = /(token|password|passwd|secret|credential|api[_-]?key|private[_-]?key|sign[_-]?in|\bauth\b)/i
-const CREDENTIAL_COMMAND = /(export\s+[a-z0-9_-]*(?:key|token|secret|password)[a-z0-9_-]*=|cat\s+[^\s]*(?:\.env|credentials|\.aws)|\$?(?:api[_-]?key|token|secret|password)\b)/i
+const CREDENTIAL_COMMAND =
+  /(export\s+[a-z0-9_-]*(?:key|token|secret|password)[a-z0-9_-]*=|cat\s+[^\s]*(?:\.env|credentials|\.aws)|\$?(?:api[_-]?key|token|secret|password)\b)/i
 
 /**
  * Heuristically decide whether a permission request looks credential-related.
@@ -413,12 +388,7 @@ export interface WarningFileInput {
 /** Render a sanitized warning entry for the shared SECURITY-WARNINGS.md file. */
 export function renderWarningEntry(input: WarningFileInput): string {
   const iso = toIso(input.timestamp)
-  const lines = [
-    `## ${iso} — ${redactSecrets(input.sessionID)}`,
-    "",
-    ...input.reasons.map((reason) => `- ${redactSecrets(reason)}`),
-  ]
+  const lines = [`## ${iso} — ${redactSecrets(input.sessionID)}`, "", ...input.reasons.map((reason) => `- ${redactSecrets(reason)}`)]
   if (input.reply) lines.push("", `User reply: ${redactSecrets(input.reply)}`)
   return `${lines.join("\n")}\n`
 }
-

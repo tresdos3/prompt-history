@@ -20,6 +20,7 @@ test("options accept valid overrides", () => {
     force: true,
     datePrefix: true,
     maxParentDepth: 8,
+    dryRun: true,
   })
   assert.equal(parsed.directory, "/tmp/archive")
   assert.equal(parsed.includeReasoning, true)
@@ -32,6 +33,7 @@ test("options accept valid overrides", () => {
   assert.equal(parsed.force, true)
   assert.equal(parsed.datePrefix, true)
   assert.equal(parsed.maxParentDepth, 8)
+  assert.equal(parsed.dryRun, true)
 })
 
 test("invalid options fall back to defaults", () => {

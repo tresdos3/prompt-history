@@ -24,8 +24,12 @@ function storageCtx() {
   return {
     ctx: {
       storage: {
-        async get(key: string) { return data.get(key) },
-        async set(key: string, value: unknown) { data.set(key, value) },
+        async get(key: string) {
+          return data.get(key)
+        },
+        async set(key: string, value: unknown) {
+          data.set(key, value)
+        },
       },
     } as never,
     data,
@@ -33,7 +37,7 @@ function storageCtx() {
 }
 
 test("highestNumber parses only matching prefixes", () => {
-  assert.equal(highestNumber(["01-a.md", "07-b.md", "x99.md", "10-c.md"], /^(\d{2})-/,), 10)
+  assert.equal(highestNumber(["01-a.md", "07-b.md", "x99.md", "10-c.md"], /^(\d{2})-/), 10)
   assert.equal(highestNumber([], /^(\d{4})-/), 0)
 })
 

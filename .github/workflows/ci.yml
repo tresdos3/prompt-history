@@ -20,7 +20,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm run typecheck
-      - run: pnpm pack --pack-destination .
+      - run: pnpm run format:check
+      - run: pnpm run pack:check
+        env:
+          PACK_DEST: .
       - uses: actions/upload-artifact@v4
         with:
           name: package

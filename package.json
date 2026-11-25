@@ -24,11 +24,14 @@
     "test": "node --test *.test.ts test/*.test.ts",
     "test:root": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "pack:check": "pnpm pack --pack-destination /private/var/folders/cv/z4kr2kj95jgb41tjvgrpy10w0000gp/T/opencode"
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "pack:check": "pnpm pack --pack-destination \"${PACK_DEST:-/private/var/folders/cv/z4kr2kj95jgb41tjvgrpy10w0000gp/T/opencode}\""
   },
   "devDependencies": {
     "@opencode/plugin": "2.4.1",
     "@types/node": "^24.0.0",
+    "prettier": "^3.10.1",
     "typescript": "^5.9.0"
   },
   "engines": {

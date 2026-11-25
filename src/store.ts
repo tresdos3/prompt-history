@@ -68,11 +68,7 @@ export async function getIndex(ctx: Ctx): Promise<Record<string, IndexEntry>> {
   return result
 }
 
-export async function setIndexEntry(
-  ctx: Ctx,
-  folder: string,
-  entry: IndexEntry,
-): Promise<void> {
+export async function setIndexEntry(ctx: Ctx, folder: string, entry: IndexEntry): Promise<void> {
   const all = await getIndex(ctx)
   const previous = all[folder]
   all[folder] = {
@@ -107,22 +103,14 @@ export async function getSessionFlags(ctx: Ctx): Promise<Record<string, SessionF
 }
 
 /** Merge flags for one session, persisting them for later events. */
-export async function setSessionFlags(
-  ctx: Ctx,
-  sessionID: string,
-  patch: Partial<SessionFlags>,
-): Promise<void> {
+export async function setSessionFlags(ctx: Ctx, sessionID: string, patch: Partial<SessionFlags>): Promise<void> {
   const all = await getSessionFlags(ctx)
   all[sessionID] = { ...all[sessionID], ...patch }
   await ctx.storage.set(FLAGS_KEY, JSON.stringify(all))
 }
 
 /** Remove a flag from one session (used for one-shot signals such as a rejection). */
-export async function clearSessionFlag(
-  ctx: Ctx,
-  sessionID: string,
-  flag: keyof SessionFlags,
-): Promise<void> {
+export async function clearSessionFlag(ctx: Ctx, sessionID: string, flag: keyof SessionFlags): Promise<void> {
   const all = await getSessionFlags(ctx)
   const current = all[sessionID]
   if (!current || !current[flag]) return
@@ -135,9 +123,7 @@ export async function clearSessionFlag(
 
 export async function getSeen(ctx: Ctx): Promise<string[]> {
   const value = await ctx.storage.get(SEEN_KEY)
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : []
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
 }
 
 export async function setSeen(ctx: Ctx, ids: ReadonlyArray<string>): Promise<void> {
@@ -191,10 +177,7 @@ export async function getLastInteractions(ctx: Ctx): Promise<Record<string, Last
   return result
 }
 
-export async function setLastInteractions(
-  ctx: Ctx,
-  map: Record<string, LastInteraction>,
-): Promise<void> {
+export async function setLastInteractions(ctx: Ctx, map: Record<string, LastInteraction>): Promise<void> {
   await ctx.storage.set(LAST_KEY, JSON.stringify(map))
 }
 
@@ -221,12 +204,14 @@ export async function createSessionFolder(
   root: string,
   titleSlug: string,
   datePrefix = "",
+  dryRun = false,
 ): Promise<{ name: string; path: string }> {
-  await mkdir(root, { recursive: true })
+  if (!dryRun) await mkdir(root, { recursive: true })
   const names = await readDirNames(root)
   let number = highestNumber(names, /^(?:\d{4}-\d{2}-\d{2}-)?(\d{4})-/i) + 1
   while (true) {
     const name = `${datePrefix}${String(number).padStart(4, "0")}-${titleSlug}`
+    if (dryRun) return { name, path: path.join(root, name) }
     try {
       await mkdir(path.join(root, name))
       return { name, path: path.join(root, name) }
@@ -253,12 +238,7 @@ export async function writeArchiveFile(root: string, filename: string, content: 
 }
 
 /** Write a numbered Markdown file exclusively; bump the number on collision. */
-export async function writeNumbered(
-  dir: string,
-  number: number,
-  base: string,
-  content: string,
-): Promise<string> {
+export async function writeNumbered(dir: string, number: number, base: string, content: string): Promise<string> {
   await mkdir(dir, { recursive: true })
   let next = Math.max(1, number)
   while (true) {
