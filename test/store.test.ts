@@ -8,6 +8,7 @@ import {
   createSessionFolder,
   getIndex,
   getSeen,
+  isArchivePaused,
   pruneOldSessions,
   readGitMetadata,
   setIndexEntry,
@@ -208,6 +209,17 @@ test("maxSessions keeps only the newest folders", async () => {
     }
     assert.deepEqual((await pruneOldSessions(ctx, base, "0003-c", undefined, 1)).sort(), ["0001-a", "0002-b"])
     assert.deepEqual(await readdir(base), ["0003-c"])
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("pause sentinel is detected only when present", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-pause-"))
+  try {
+    assert.equal(await isArchivePaused(base), false)
+    await writeFile(path.join(base, ".paused"), "")
+    assert.equal(await isArchivePaused(base), true)
   } finally {
     await rm(base, { recursive: true, force: true })
   }

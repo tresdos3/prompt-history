@@ -141,7 +141,8 @@ Pass options in `opencode.json(c)`:
         "maxSessions": 500,
         "autoTags": ["work"],
         "tagFromTitle": true,
-        "includeProjectName": false
+        "includeProjectName": false,
+        "paused": false
       }
     }
   ]
@@ -172,6 +173,7 @@ Pass options in `opencode.json(c)`:
 | `autoTags` | string[] | unset | Tags applied to every recorded session. |
 | `tagFromTitle` | boolean | `false` | Extract `#hashtags` from the session title and first prompt. |
 | `includeProjectName` | boolean | `false` | Nest records under a sanitized `<project>/` subdirectory. |
+| `paused` | boolean | `false` | Skip all recording while true. |
 
 ### Custom templates
 
@@ -186,6 +188,10 @@ An `INDEX.md` in the archive root lists every recorded session with links to its
 ### Tags
 
 Tags appear as a `tags:` frontmatter array on result files and in `INDEX.md`. Use `autoTags` for fixed labels and `tagFromTitle: true` to pull `#hashtags` from the session title or first prompt (numeric-only hashtags are ignored). Add `tag` to the `export` filter to produce a tag-specific archive.
+
+### Pause recording
+
+Set `paused: true` in config, or create a `.paused` file in the archive root, to temporarily stop recording. While paused, all session and permission events are skipped (including credential warnings) and a single notice is logged to stderr. Remove the file or set the option back to `false` to resume.
 
 ### Multiple projects
 

@@ -5,7 +5,7 @@
  * overwritten. No child processes are spawned by this plugin.
  */
 
-import { appendFile, mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { access, appendFile, mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { Plugin } from "@opencode/plugin"
 import type { ExportEntry, TranscriptEntry } from "./core.ts"
@@ -375,6 +375,16 @@ export async function createSessionFolder(
       }
       throw error
     }
+  }
+}
+
+/** True when a `.paused` sentinel exists in the archive root. */
+export async function isArchivePaused(root: string): Promise<boolean> {
+  try {
+    await access(path.join(root, ".paused"))
+    return true
+  } catch {
+    return false
   }
 }
 

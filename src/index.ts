@@ -46,6 +46,7 @@ import {
   getSessionFlags,
   getTranscripts,
   highestNumber,
+  isArchivePaused,
   pruneOldSessions,
   readDirNames,
   readGitMetadata,
@@ -513,11 +514,19 @@ const plugin = Plugin.define({
       ctx = namespaceStorage(ctx, project || "project")
     }
     const controller = new AbortController()
+    let pausedNoticeShown = false
 
     void (async () => {
       const events = ctx.event.subscribe({ signal: controller.signal })
       for await (const raw of events) {
         const event = raw as unknown as { type: string; data?: Record<string, unknown> }
+        if (options.paused || (await isArchivePaused(root))) {
+          if (!pausedNoticeShown) {
+            console.warn("[prompt-archive] recording paused; events skipped")
+            pausedNoticeShown = true
+          }
+          continue
+        }
         if (event.type === "permission.asked" || event.type === "permission.replied") {
           await enqueue(async () => {
             try {

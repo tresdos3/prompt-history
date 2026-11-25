@@ -57,6 +57,8 @@ export interface ArchiveOptions {
   tagFromTitle: boolean
   /** Nest records under a sanitized project-name directory. */
   includeProjectName: boolean
+  /** Skip all recording while true. */
+  paused: boolean
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -76,6 +78,7 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   transcriptName: "TRANSCRIPT.md",
   tagFromTitle: false,
   includeProjectName: false,
+  paused: false,
 }
 
 /** Parse the optional export configuration. Invalid values are ignored with a warning. */
@@ -165,7 +168,7 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     }
   }
 
-  for (const key of ["includeTranscript", "tagFromTitle", "includeProjectName"] as const) {
+  for (const key of ["includeTranscript", "tagFromTitle", "includeProjectName", "paused"] as const) {
     const value = input[key]
     if (typeof value === "boolean") options[key] = value
     else if (value !== undefined) warnings.push(`${key} must be a boolean`)
