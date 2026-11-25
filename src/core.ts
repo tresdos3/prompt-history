@@ -94,12 +94,23 @@ export function slugify(input: string, maxWords = 6, maxChars = 48): string {
     .trim()
   if (!cleaned) return "interaction"
   const words = cleaned.split(" ").slice(0, maxWords).join("-")
-  return words.slice(0, maxChars).replace(/-+$/, "") || "interaction"
+  let slug = words.slice(0, maxChars).replace(/-+$/, "")
+  // Windows treats these as device names and forbids trailing dots/spaces.
+  slug = slug.replace(/[. ]+$/, "")
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(slug)) slug = `${slug}-archive`
+  return slug || "interaction"
 }
 
 export function toIso(ms: number): string {
   const date = new Date(ms)
   return Number.isFinite(date.getTime()) ? date.toISOString() : new Date(0).toISOString()
+}
+
+/** Cap body length with a visible marker instead of writing unbounded files. */
+export function truncateText(value: string, maxChars: number): string {
+  const max = Math.max(0, Math.trunc(maxChars))
+  if (value.length <= max) return value
+  return `${value.slice(0, max)}\n\n[... truncated at ${max} characters ...]`
 }
 
 /** Return only user/assistant messages that have not been recorded yet. */
@@ -245,6 +256,7 @@ export interface PromptFileInput {
   timestamp: number
   text: string
   status: InteractionStatus
+  maxTextChars?: number
 }
 
 export function renderPromptFile(input: PromptFileInput): string {
@@ -259,7 +271,8 @@ export function renderPromptFile(input: PromptFileInput): string {
     ["status", input.status],
     ["title", input.title],
   ]
-  return `${frontmatter(fields)}\n# Prompt — ${input.title}\n\n${redactSecrets(input.text)}\n`
+  const body = truncateText(redactSecrets(input.text), input.maxTextChars ?? 100_000)
+  return `${frontmatter(fields)}\n# Prompt — ${input.title}\n\n${body}\n`
 }
 
 export interface ResultFileInput {
@@ -276,6 +289,7 @@ export interface ResultFileInput {
   includeTools?: boolean
   includeChangedFiles?: boolean
   maxChangedFiles?: number
+  maxTextChars?: number
   /** True when a credential-related permission was flagged in this session. */
   securityWarning?: boolean
 }
@@ -283,9 +297,10 @@ export interface ResultFileInput {
 export function renderResultFile(input: ResultFileInput): string {
   const files = input.includeChangedFiles === false ? [] : changedFiles(input.responses, input.maxChangedFiles)
   const tools = input.includeTools === false ? [] : [...new Set(input.responses.flatMap(toolNames))]
-  const text = redactSecrets(input.responses.map(responseText).filter(Boolean).join("\n\n"))
+  const maxTextChars = input.maxTextChars ?? 100_000
+  const text = truncateText(redactSecrets(input.responses.map(responseText).filter(Boolean).join("\n\n")), maxTextChars)
   const reasoning = input.includeReasoning
-    ? redactSecrets(input.responses.map(reasoningText).filter(Boolean).join("\n\n"))
+    ? truncateText(redactSecrets(input.responses.map(reasoningText).filter(Boolean).join("\n\n")), maxTextChars)
     : ""
   const fields: Array<readonly [string, string | ReadonlyArray<string>]> = [
     ["kind", "result"],

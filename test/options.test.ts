@@ -14,6 +14,7 @@ test("options accept valid overrides", () => {
     includeTools: false,
     includeChangedFiles: false,
     maxChangedFiles: 5,
+    maxTextChars: 1234,
     verbose: true,
     warnOnCredentialPermission: true,
   })
@@ -22,6 +23,7 @@ test("options accept valid overrides", () => {
   assert.equal(parsed.includeTools, false)
   assert.equal(parsed.includeChangedFiles, false)
   assert.equal(parsed.maxChangedFiles, 5)
+  assert.equal(parsed.maxTextChars, 1234)
   assert.equal(parsed.verbose, true)
   assert.equal(parsed.warnOnCredentialPermission, true)
 })
@@ -35,6 +37,7 @@ test("invalid options fall back to defaults", () => {
   assert.equal(parsed.directory, DEFAULT_OPTIONS.directory)
   assert.equal(parsed.includeReasoning, false)
   assert.equal(parsed.maxChangedFiles, 0)
+  assert.equal(parsed.maxTextChars, DEFAULT_OPTIONS.maxTextChars)
 })
 
 test("relative directories resolve against the project directory", () => {

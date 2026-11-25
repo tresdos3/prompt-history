@@ -168,6 +168,7 @@ export async function processSession(
           includeTools: options.includeTools,
           includeChangedFiles: options.includeChangedFiles,
           maxChangedFiles: options.maxChangedFiles,
+          maxTextChars: options.maxTextChars,
           securityWarning,
         }),
       )
@@ -193,6 +194,7 @@ export async function processSession(
         timestamp: interaction.prompt.time?.created ?? Date.now(),
         text: interaction.prompt.text ?? "",
         status,
+        maxTextChars: options.maxTextChars,
       }),
     )
     number += 1
@@ -215,6 +217,7 @@ export async function processSession(
         includeTools: options.includeTools,
         includeChangedFiles: options.includeChangedFiles,
         maxChangedFiles: options.maxChangedFiles,
+        maxTextChars: options.maxTextChars,
         securityWarning,
       }),
     )

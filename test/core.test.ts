@@ -11,6 +11,7 @@ import {
   renderResultFile,
   renderWarningEntry,
   slugify,
+  truncateText,
   type HistoryMessage,
 } from "../src/core.ts"
 
@@ -329,6 +330,46 @@ test("credential permission classifier flags sensitive requests", () => {
   ]
   const flagged = cases.map((c) => classifyCredentialPermission(c) !== undefined)
   assert.deepEqual(flagged, [true, true, true, true, false])
+})
+
+test("long bodies are truncated with a visible marker", () => {
+  assert.equal(truncateText("abcdef", 10), "abcdef")
+  assert.equal(truncateText("abcdef", 3), "abc\n\n[... truncated at 3 characters ...]")
+  const prompt = renderPromptFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    title: "demo",
+    timestamp: 1,
+    text: "a".repeat(200),
+    status: "complete",
+    maxTextChars: 50,
+  })
+  assert.match(prompt, /a{50}/)
+  assert.match(prompt, /truncated at 50 characters/)
+})
+
+test("slugify avoids Windows reserved names and trailing dots", () => {
+  assert.equal(slugify("CON"), "con-archive")
+  assert.equal(slugify("NUL.txt"), "nul-txt") // punctuation becomes a separator, so not a device name
+  assert.equal(slugify("report."), "report")
+  assert.equal(slugify("LPT1"), "lpt1-archive")
+})
+
+test("overlapping secret formats are all removed from one string", () => {
+  const input = [
+    "postgres://user:fakepass123@db",
+    "Authorization: Bearer abcdef123456",
+    "MY_TOKEN=faketoken1234567890",
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmYWtlIn0.abcdefghijklmnop",
+    "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+  ].join("\n")
+  const out = redactSecrets(input)
+  for (const secret of ["fakepass123", "abcdef123456", "faketoken1234567890", "abcdefghijklmnop", "BEGIN PRIVATE KEY"]) {
+    assert.doesNotMatch(out, new RegExp(secret), secret)
+  }
+  assert.equal((out.match(/\[REDACTED\]/g) ?? []).length >= 4, true)
 })
 
 test("warning reasons are sanitized and never contain raw secret values", () => {

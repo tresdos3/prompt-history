@@ -12,6 +12,8 @@ export interface ArchiveOptions {
   includeTools: boolean
   includeChangedFiles: boolean
   maxChangedFiles: number
+  /** Maximum characters per prompt/response body before truncation. */
+  maxTextChars: number
   verbose: boolean
   /** Warn (stderr + archive) when a permission request looks credential-related. */
   warnOnCredentialPermission: boolean
@@ -23,6 +25,7 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   includeTools: true,
   includeChangedFiles: true,
   maxChangedFiles: 200,
+  maxTextChars: 100_000,
   verbose: false,
   warnOnCredentialPermission: false,
 }
@@ -49,6 +52,12 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     options.maxChangedFiles = Math.max(0, Math.trunc(input.maxChangedFiles))
   } else if (input.maxChangedFiles !== undefined) {
     warnings.push("maxChangedFiles must be a finite number")
+  }
+
+  if (typeof input.maxTextChars === "number" && Number.isFinite(input.maxTextChars)) {
+    options.maxTextChars = Math.max(0, Math.trunc(input.maxTextChars))
+  } else if (input.maxTextChars !== undefined) {
+    warnings.push("maxTextChars must be a finite number")
   }
 
   if (warnings.length > 0) {

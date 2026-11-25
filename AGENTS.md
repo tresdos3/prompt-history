@@ -35,6 +35,7 @@ OpenCode V2 server plugin (`opencode-prompt-archive`) that archives prompts and 
 - `redactSecrets()` must run **before** `slugify()` strips punctuation — removing `=`/`:` first would defeat credential patterns and leak secrets into filenames (`core.ts` `slugify`).
 - Keep redaction applied to every content surface: prompt text, response text, reasoning, filenames, `changed_files` paths, and warning text. Tests assert secrets never reach disk. PII (phone/SSN/card/email) is deliberately NOT detected — see `SECURITY.md`.
 - `isSecretPath()` matches whole path components (e.g. `.env`, `.aws/`, `my-token.txt`), not substrings — `src/tokenizer/*` and `src/auth/password-reset.ts` must remain in archives. Do not revert to a loose `secret|token|password` substring regex.
+- Redact **before** truncating (`truncateText()` after `redactSecrets()`): cutting a secret in half could defeat a pattern. `maxTextChars` defaults to 100,000.
 - Credential-request warnings are opt-in (`warnOnCredentialPermission`, default false) and heuristic. Never write raw secret values into `SECURITY-WARNINGS.md`; the event does not carry them and `renderWarningEntry()` re-redacts. Warnings cannot detect pre-authorized reads.
 - File numbering is global serial work: keep updates going through the `enqueue()` promise chain in `index.ts`, otherwise two events can allocate the same number.
 - Record writes use `wx`, never overwrite. Changing this breaks the "never overwrites" guarantee and the tests. `SECURITY-WARNINGS.md` is the intentional exception: append-only via `appendToArchiveFile()`.

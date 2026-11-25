@@ -7,6 +7,7 @@ This plugin writes a **plaintext transcript** of your OpenCode sessions to disk.
 - **Redaction before disk.** Prompt text, assistant responses, reasoning (when enabled), and generated filenames all pass through pattern-based redaction. Recognized credential formats are replaced with `[REDACTED]` before anything is written.
 - **Recognized formats include:** API keys, bearer tokens, provider token prefixes (OpenAI, Anthropic, Stripe, GitHub, Slack, AWS, Google), raw JWTs, SSH key blobs, private-key blocks, URL userinfo (`scheme://user:password@host`), and `key=value` / JSON assignments — including compound names such as `MY_API_KEY=` and `SECRET_TOKEN=`.
 - **Credential-bearing paths are excluded** from `changed_files` (`.env`, `.aws/`, `.ssh/`, `credentials`, `secrets`, `.pem`/`.key`, etc.).
+- **Bounded file sizes.** `maxTextChars` (default 100,000) caps prompt/response bodies with a visible truncation marker, so a single oversized output cannot create an arbitrarily large archive file.
 - **No external side effects.** The plugin does not read `.env` files, spawn processes, or modify source files. Writes are exclusive (`wx`) so existing records are never overwritten.
 - **Opt-in credential-request warnings.** With `warnOnCredentialPermission: true`, permission requests that look credential-related produce a stderr warning and an entry in `SECURITY-WARNINGS.md`. Warning text is passed through the same redaction.
 

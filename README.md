@@ -111,6 +111,7 @@ Pass options in `opencode.json(c)`:
         "includeTools": true,
         "includeChangedFiles": true,
         "maxChangedFiles": 200,
+        "maxTextChars": 100000,
         "verbose": false,
         "warnOnCredentialPermission": false
       }
@@ -126,6 +127,7 @@ Pass options in `opencode.json(c)`:
 | `includeTools` | boolean | `true` | List tool names used by the assistant. |
 | `includeChangedFiles` | boolean | `true` | Record changed files from the assistant snapshot. |
 | `maxChangedFiles` | number | `200` | Maximum number of changed-file paths per result. `node_modules/` and `.git/` paths are always excluded. |
+| `maxTextChars` | number | `100000` | Maximum characters per prompt/response body. Longer bodies are truncated with a visible marker. Set `0` to allow only the marker. |
 | `verbose` | boolean | `false` | Log the output directory once at plugin load. |
 | `warnOnCredentialPermission` | boolean | `false` | Warn (stderr + `SECURITY-WARNINGS.md` in the archive) when a permission request looks credential-related. See below. |
 
