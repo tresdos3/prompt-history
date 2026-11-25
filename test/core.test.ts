@@ -196,3 +196,85 @@ test("slugify produces short safe names and never leaks a credential", () => {
   assert.doesNotMatch(slug, /sk-abc1234567890/)
   assert.match(slug, /redacted/)
 })
+
+// All values below are deliberately fake; no real credentials appear in tests.
+const REDACTION_CASES: ReadonlyArray<readonly [string, string, string]> = [
+  ["URL credentials", "Use postgres://user:fakepass123@db.example.com:5432/app", "fakepass123"],
+  ["https userinfo", "https://admin:fakesupersecret@internal.example.com", "fakesupersecret"],
+  ["compound assignment", "SECRET_TOKEN=faketoken1234567890", "faketoken1234567890"],
+  ["export assignment", "export MY_API_KEY=fake1234567890xyz", "fake1234567890xyz"],
+  ["stripe key", "sk_live_fake1234567890abcdef", "sk_live_fake1234567890abcdef"],
+  ["raw jwt", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmYWtlIn0.abcdefghijklmnop", "abcdefghijklmnop"],
+  ["ssh key", "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCfakefakefake test@host", "AAAAB3NzaC1yc2E"],
+  ["json password", '{"password":"fakehunter2","user":"admin"}', "fakehunter2"],
+]
+
+test("redaction removes a broad set of credential formats", () => {
+  for (const [label, input, fakeSecret] of REDACTION_CASES) {
+    const out = redactSecrets(input)
+    assert.doesNotMatch(out, new RegExp(fakeSecret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), label)
+    assert.match(out, /\[REDACTED\]/, label)
+  }
+})
+
+test("redaction keeps ordinary prose intact", () => {
+  const prose = "Refactor the login form and update the README with the new API docs."
+  assert.equal(redactSecrets(prose), prose)
+})
+
+test("credential-bearing file paths never reach the archive", () => {
+  const assistant = message({
+    id: "msg-10",
+    type: "assistant",
+    snapshot: {
+      files: [
+        ".env",
+        ".env.local",
+        "/work/.aws/credentials",
+        "/work/.ssh/id_rsa",
+        "config/secrets.yml",
+        "server/private.pem",
+        "my-token.txt",
+        "src/app.ts",
+        "src/lib.ts",
+      ],
+    },
+  })
+  assert.deepEqual(changedFiles([assistant]), ["src/app.ts", "src/lib.ts"])
+})
+
+test("fake credentials never appear in rendered prompt or result files", () => {
+  const fake = "sk-fake1234567890xyz"
+  const prompt = renderPromptFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    title: "demo",
+    timestamp: 1,
+    text: `Here is a key: ${fake}`,
+    status: "complete",
+  })
+  const result = renderResultFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    promptFile: "01-demo-prompt.md",
+    timestamp: 1,
+    status: "complete",
+    outcome: "succeeded",
+    responses: [
+      message({
+        id: "msg-11",
+        type: "assistant",
+        content: [{ type: "text", text: `Stored ${fake} in config` }],
+      }),
+    ],
+    includeReasoning: true,
+  })
+  for (const rendered of [prompt, result]) {
+    assert.doesNotMatch(rendered, /sk-fake1234567890xyz/)
+    assert.match(rendered, /\[REDACTED\]/)
+  }
+})

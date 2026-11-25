@@ -42,8 +42,16 @@ const SECRET_PATTERNS: ReadonlyArray<{ re: RegExp; replacement: string }> = [
     replacement: "[REDACTED]",
   },
   {
+    // URL userinfo: scheme://user:password@host -> scheme://user:[REDACTED]@host.
+    // Runs before generic assignments so a pasted DSN is fully sanitized.
+    re: /([a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+)(:[^/\s@]*)?@/gi,
+    replacement: "$1$2:[REDACTED]@",
+  },
+  {
     // key: value / KEY=value / "key": "value" style assignments.
-    re: /\b(api[_-]?key|apikey|secret|password|passwd|pwd|token|auth|authorization|credential|credentials|private[_-]?key|access[_-]?key)\b(["']?)(\s*[:=]\s*)(["']?)(?!bearer\b)([^\s"',;#\n]+)/gi,
+    // The name may have prefixes/suffixes (MY_API_KEY, SECRET_TOKEN, DB_PASSWORD)
+    // but a `:` or `=` separator is still required to avoid mangling prose.
+    re: /\b([a-z0-9_-]*(?:api[_-]?key|apikey|secret|password|passwd|pwd|token|auth|authorization|credential|credentials|private[_-]?key|access[_-]?key)[a-z0-9_-]*)(["']?)(\s*[:=]\s*)(["']?)(?!bearer\b)([^\s"',;#\n]+)/gi,
     replacement: "$1$2$3$4[REDACTED]",
   },
   {
@@ -52,12 +60,17 @@ const SECRET_PATTERNS: ReadonlyArray<{ re: RegExp; replacement: string }> = [
     replacement: "$1$2[REDACTED]$2",
   },
   { re: /\bBearer\s+[A-Za-z0-9._~+/=-]{6,}/gi, replacement: "Bearer [REDACTED]" },
-  { re: /\b(?:sk-ant-|sk-)[A-Za-z0-9_-]{8,}/g, replacement: "[REDACTED]" },
+  { re: /\b(?:sk-ant-|sk_(?:proj|live|test)_|sk-)[A-Za-z0-9_-]{8,}/g, replacement: "[REDACTED]" },
+  { re: /\b(?:rk_(?:live|test)_)[A-Za-z0-9]{8,}/g, replacement: "[REDACTED]" },
   { re: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g, replacement: "[REDACTED]" },
   { re: /\bgithub_pat_[A-Za-z0-9_]{20,}/g, replacement: "[REDACTED]" },
   { re: /\bxox[baprs]-[A-Za-z0-9-]{10,}/g, replacement: "[REDACTED]" },
   { re: /\bAKIA[0-9A-Z]{16}\b/g, replacement: "[REDACTED]" },
   { re: /\bAIza[0-9A-Za-z_-]{20,}\b/g, replacement: "[REDACTED]" },
+  // Raw JWT (three base64url segments) even without a `Bearer ` prefix.
+  { re: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, replacement: "[REDACTED]" },
+  // SSH public/private key blobs.
+  { re: /\b(?:ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp\d+)\s+[A-Za-z0-9+/=]{20,}/g, replacement: "[REDACTED]" },
 ]
 
 /** Replace credential-shaped values with a fixed marker. Never throws. */
@@ -148,9 +161,13 @@ export function toolNames(message: HistoryMessage): string[] {
 
 const IGNORED_CHANGE = /(^|\/)(node_modules|\.git)\//
 
+/** Paths that are likely to hold credentials; never written to the archive. */
+const SECRET_PATH = /(?:\.env(?:\.|$)|(?:^|\/)\.aws\/|(?:^|\/)\.ssh\/|(?:^|\/)credentials(?:$|\/)|secret|token|password|\.pem$|\.key$|id_rsa|\.npmrc$|\.netrc$)/i
+
 /**
  * Deduplicate changed-file paths reported on assistant messages.
- * Dependency/VCS internals are omitted so the frontmatter stays readable.
+ * Dependency/VCS internals and credential-bearing paths are omitted so the
+ * frontmatter stays readable and cannot disclose where secrets live.
  */
 export function changedFiles(
   responses: ReadonlyArray<HistoryMessage>,
@@ -159,8 +176,13 @@ export function changedFiles(
   const files = new Set<string>()
   for (const response of responses) {
     for (const file of response.snapshot?.files ?? []) {
-      if (typeof file === "string" && file.length > 0 && !IGNORED_CHANGE.test(file)) {
-        files.add(file)
+      if (
+        typeof file === "string" &&
+        file.length > 0 &&
+        !IGNORED_CHANGE.test(file) &&
+        !SECRET_PATH.test(file)
+      ) {
+        files.add(redactSecrets(file))
       }
     }
   }

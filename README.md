@@ -134,7 +134,7 @@ Invalid option values fall back to the defaults with a warning; they never stop 
 Read this before using the plugin with sensitive work.
 
 - **Full prompts and responses are written to disk.** The archive is a plaintext transcript of your sessions. Protect the output directory accordingly and consider adding it to `.gitignore` if you do not want it committed.
-- **Redaction is pattern-based.** API keys, bearer tokens, common provider token prefixes, private-key blocks, and `key=value` / JSON credential assignments become `[REDACTED]` in both prompt and result text, including reasoning and filenames. This cannot catch every secret format — **do not paste real credentials into a prompt**.
+- **Redaction is pattern-based.** API keys, bearer tokens, provider token prefixes (OpenAI, Anthropic, Stripe, GitHub, Slack, AWS, Google), JWTs, SSH key blobs, private-key blocks, URL userinfo (`scheme://user:password@host`), and `key=value` / JSON credential assignments (including compound names like `MY_API_KEY=` and `SECRET_TOKEN=`) become `[REDACTED]` in both prompt and result text, including reasoning and filenames. Credential-bearing file paths (`.env`, `.aws/`, `.ssh/`, `credentials`, `secrets`, `.pem`/`.key`) are excluded from `changed_files`. This cannot catch every secret format and does not detect PII (phone numbers, SSNs, card numbers) — **do not paste real credentials into a prompt**. See [SECURITY.md](SECURITY.md) for the full threat model.
 - The plugin never reads `.env` files and never spawns shell commands or child processes.
 - It never modifies source files or agent instructions. It only creates new files under the configured directory.
 - An agent recommendation is recorded verbatim; the plugin never treats it as an approved human decision.
