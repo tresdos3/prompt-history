@@ -55,6 +55,8 @@ export interface ArchiveOptions {
   autoTags?: string[]
   /** Extract #hashtags from the session title and first prompt. */
   tagFromTitle: boolean
+  /** Nest records under a sanitized project-name directory. */
+  includeProjectName: boolean
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -73,6 +75,7 @@ export const DEFAULT_OPTIONS: ArchiveOptions = {
   includeTranscript: true,
   transcriptName: "TRANSCRIPT.md",
   tagFromTitle: false,
+  includeProjectName: false,
 }
 
 /** Parse the optional export configuration. Invalid values are ignored with a warning. */
@@ -162,7 +165,7 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     }
   }
 
-  for (const key of ["includeTranscript", "tagFromTitle"] as const) {
+  for (const key of ["includeTranscript", "tagFromTitle", "includeProjectName"] as const) {
     const value = input[key]
     if (typeof value === "boolean") options[key] = value
     else if (value !== undefined) warnings.push(`${key} must be a boolean`)

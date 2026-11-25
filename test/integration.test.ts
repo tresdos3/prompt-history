@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import test from "node:test"
-import { processSession } from "../src/index.ts"
+import { namespaceStorage, processSession } from "../src/index.ts"
 import { DEFAULT_OPTIONS } from "../src/options.ts"
 import type { HistoryMessage } from "../src/core.ts"
 
@@ -132,6 +132,15 @@ test("INDEX.md links the recorded session and its files", async () => {
   } finally {
     await rm(base, { recursive: true, force: true })
   }
+})
+
+test("namespaced storage isolates projects", async () => {
+  const { ctx, data } = fakeCtx({ messages: [] })
+  const wrapped = namespaceStorage(ctx, "my-project")
+  await wrapped.storage.set("key", "value")
+  assert.equal(data.get("my-project/key"), "value")
+  assert.equal(await wrapped.storage.get("key"), "value")
+  assert.equal(data.get("key"), undefined)
 })
 
 test("auto tags and hashtags reach frontmatter and INDEX.md", async () => {

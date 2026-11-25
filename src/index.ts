@@ -490,11 +490,28 @@ async function handlePermissionEvent(
   }
 }
 
+/** Wrap ctx.storage with a project-specific key prefix for global configs. */
+export function namespaceStorage(ctx: Ctx, prefix: string): Ctx {
+  const wrapped = Object.create(ctx) as Ctx
+  Object.defineProperty(wrapped, "storage", {
+    value: {
+      get: (key: string) => ctx.storage.get(`${prefix}/${key}`),
+      set: (key: string, value: unknown) => ctx.storage.set(`${prefix}/${key}`, value as never),
+    },
+  })
+  return wrapped
+}
+
 const plugin = Plugin.define({
   id: "opencode.prompt-archive",
   setup(ctx) {
     const options = parseOptions(ctx.options)
-    const root = resolveDirectory(options.directory, ctx.location.directory)
+    let root = resolveDirectory(options.directory, ctx.location.directory)
+    if (options.includeProjectName) {
+      const project = slugify(path.basename(ctx.location.directory), 6, 64)
+      root = path.join(root, project || "project")
+      ctx = namespaceStorage(ctx, project || "project")
+    }
     const controller = new AbortController()
 
     void (async () => {

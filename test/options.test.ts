@@ -30,6 +30,7 @@ test("options accept valid overrides", () => {
     maxSessions: 10,
     autoTags: ["team-a", "team-a", "team-b"],
     tagFromTitle: true,
+    includeProjectName: true,
   })
   assert.equal(parsed.directory, "/tmp/archive")
   assert.equal(parsed.includeReasoning, true)
@@ -52,6 +53,7 @@ test("options accept valid overrides", () => {
   assert.equal(parsed.maxSessions, 10)
   assert.deepEqual(parsed.autoTags, ["team-a", "team-a", "team-b"])
   assert.equal(parsed.tagFromTitle, true)
+  assert.equal(parsed.includeProjectName, true)
 })
 
 test("invalid options fall back to defaults", () => {

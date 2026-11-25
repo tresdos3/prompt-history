@@ -140,7 +140,8 @@ Pass options in `opencode.json(c)`:
         "retentionDays": 90,
         "maxSessions": 500,
         "autoTags": ["work"],
-        "tagFromTitle": true
+        "tagFromTitle": true,
+        "includeProjectName": false
       }
     }
   ]
@@ -170,6 +171,7 @@ Pass options in `opencode.json(c)`:
 | `maxSessions` | number | unset | Keep at most this many session folders, deleting the oldest first. |
 | `autoTags` | string[] | unset | Tags applied to every recorded session. |
 | `tagFromTitle` | boolean | `false` | Extract `#hashtags` from the session title and first prompt. |
+| `includeProjectName` | boolean | `false` | Nest records under a sanitized `<project>/` subdirectory. |
 
 ### Custom templates
 
@@ -184,6 +186,10 @@ An `INDEX.md` in the archive root lists every recorded session with links to its
 ### Tags
 
 Tags appear as a `tags:` frontmatter array on result files and in `INDEX.md`. Use `autoTags` for fixed labels and `tagFromTitle: true` to pull `#hashtags` from the session title or first prompt (numeric-only hashtags are ignored). Add `tag` to the `export` filter to produce a tag-specific archive.
+
+### Multiple projects
+
+With a global plugin config, every project would otherwise share one archive. Set `includeProjectName: true` to write under `<directory>/<project-name>/`. Storage keys are namespaced by the same project name so sessions from different projects never collide.
 
 ### Retention
 
