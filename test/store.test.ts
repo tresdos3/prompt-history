@@ -7,6 +7,8 @@ import {
   clearSessionFlag,
   createSessionFolder,
   getIndex,
+  getSeen,
+  pruneOldSessions,
   readGitMetadata,
   setIndexEntry,
   writeArchiveFile,
@@ -160,6 +162,52 @@ test("git metadata falls back to packed-refs and returns empty without .git", as
     await writeFile(path.join(dir, "HEAD"), "ref: refs/heads/main\n")
     await writeFile(path.join(dir, "packed-refs"), `# pack-refs with: peeled fully-peeled sorted\n${FAKE_SHA} refs/heads/main\n`)
     assert.deepEqual(await readGitMetadata(base), { branch: "main", commit: FAKE_SHA })
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("retention deletes old folders and purges their state", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-retention-"))
+  try {
+    const { ctx } = storageCtx()
+    for (const [folder, date] of [
+      ["0001-old", "2020-01-01"],
+      ["0002-new", new Date().toISOString().slice(0, 10)],
+    ]) {
+      await mkdir(path.join(base, folder))
+      await setIndexEntry(ctx, folder, {
+        title: folder,
+        date,
+        files: [],
+        sessionID: `ses-${folder}`,
+        seenIDs: [`msg-${folder}`],
+      })
+    }
+    const removed = await pruneOldSessions(ctx, base, "0002-new", 30)
+    assert.deepEqual(removed, ["0001-old"])
+    assert.deepEqual(await readdir(base), ["0002-new"])
+    assert.deepEqual(Object.keys(await getIndex(ctx)), ["0002-new"])
+    assert.deepEqual(await getSeen(ctx), [])
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("maxSessions keeps only the newest folders", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-retention-"))
+  try {
+    const { ctx } = storageCtx()
+    for (const [folder, date] of [
+      ["0001-a", "2020-01-01"],
+      ["0002-b", "2020-01-02"],
+      ["0003-c", "2020-01-03"],
+    ]) {
+      await mkdir(path.join(base, folder))
+      await setIndexEntry(ctx, folder, { title: folder, date, files: [] })
+    }
+    assert.deepEqual((await pruneOldSessions(ctx, base, "0003-c", undefined, 1)).sort(), ["0001-a", "0002-b"])
+    assert.deepEqual(await readdir(base), ["0003-c"])
   } finally {
     await rm(base, { recursive: true, force: true })
   }

@@ -136,7 +136,9 @@ Pass options in `opencode.json(c)`:
         "promptTemplate": "# {{title}}\n\n{{body}}",
         "resultTemplate": "{{agent}} — {{outcome}}\n\n{{body}}",
         "includeTranscript": true,
-        "transcriptName": "TRANSCRIPT.md"
+        "transcriptName": "TRANSCRIPT.md",
+        "retentionDays": 90,
+        "maxSessions": 500
       }
     }
   ]
@@ -162,6 +164,8 @@ Pass options in `opencode.json(c)`:
 | `resultTemplate` | string | unset | Custom Markdown body for result files. See below. |
 | `includeTranscript` | boolean | `true` | Write a chronological `TRANSCRIPT.md` in each session folder. |
 | `transcriptName` | string | `TRANSCRIPT.md` | Override the transcript filename. |
+| `retentionDays` | number | unset | Delete session folders older than this many days. |
+| `maxSessions` | number | unset | Keep at most this many session folders, deleting the oldest first. |
 
 ### Custom templates
 
@@ -172,6 +176,10 @@ Pass options in `opencode.json(c)`:
 Set `export` to generate a single file containing every recorded interaction, filtered by `dateFrom` / `dateTo` (YYYY-MM-DD), `agent` (substring), `status` (`complete` or `incomplete`), and `text` (case-insensitive substring of prompt or response). `format` is `md` (default) or `jsonl`; `outFile` defaults to `ARCHIVE.md`. The file is regenerated after each session, so filter changes on reload take effect immediately. All content is redacted before writing.
 
 An `INDEX.md` in the archive root lists every recorded session with links to its prompt and result files. It is regenerated after each session; session records themselves are never overwritten.
+
+### Retention
+
+`retentionDays` and `maxSessions` can be set independently or together. Pruning runs after each session, never deletes the session just recorded, and also purges that session's dedupe/folder/tag state so a retained record can be re-created if needed. Deletions are logged to stderr and are permanent. `dryRun` reports without deleting anything.
 
 Invalid option values fall back to the defaults with a warning; they never stop recording.
 

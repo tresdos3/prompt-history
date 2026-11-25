@@ -5,7 +5,7 @@
  * overwritten. No child processes are spawned by this plugin.
  */
 
-import { appendFile, mkdir, open, readFile, readdir, stat, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { Plugin } from "@opencode/plugin"
 import type { ExportEntry, TranscriptEntry } from "./core.ts"
@@ -39,6 +39,8 @@ export interface IndexEntry {
   date: string
   files: string[]
   branch?: string
+  sessionID?: string
+  seenIDs?: string[]
 }
 
 /** Local git metadata, read from .git files only — no shell or child processes. */
@@ -127,6 +129,10 @@ export async function getIndex(ctx: Ctx): Promise<Record<string, IndexEntry>> {
         date: record.date,
         files: record.files as string[],
         ...(typeof record.branch === "string" ? { branch: record.branch } : {}),
+        ...(typeof record.sessionID === "string" ? { sessionID: record.sessionID } : {}),
+        ...(Array.isArray(record.seenIDs) && record.seenIDs.every((id) => typeof id === "string")
+          ? { seenIDs: record.seenIDs as string[] }
+          : {}),
       }
     }
   }
@@ -192,6 +198,8 @@ export async function setIndexEntry(ctx: Ctx, folder: string, entry: IndexEntry)
     date: entry.date || previous?.date || "",
     files: [...new Set([...(previous?.files ?? []), ...entry.files])],
     ...(entry.branch || previous?.branch ? { branch: entry.branch || previous?.branch } : {}),
+    ...(entry.sessionID || previous?.sessionID ? { sessionID: entry.sessionID || previous?.sessionID } : {}),
+    ...(entry.seenIDs || previous?.seenIDs ? { seenIDs: [...new Set([...(previous?.seenIDs ?? []), ...(entry.seenIDs ?? [])])] } : {}),
   }
   await ctx.storage.set(INDEX_KEY, JSON.stringify(all))
 }
@@ -352,6 +360,87 @@ export async function appendToArchiveFile(root: string, filename: string, conten
 export async function writeArchiveFile(root: string, filename: string, content: string): Promise<void> {
   await mkdir(root, { recursive: true })
   await writeFile(path.join(root, filename), content, "utf8")
+}
+
+/**
+ * Delete session folders by age or count, then purge their state from storage.
+ * The current session is never deleted. Returns the names of deleted folders.
+ */
+export async function pruneOldSessions(
+  ctx: Ctx,
+  root: string,
+  currentFolder: string,
+  retentionDays?: number,
+  maxSessions?: number,
+): Promise<string[]> {
+  const index = await getIndex(ctx)
+  const allEntries = Object.entries(index)
+  const candidates = allEntries.filter(([folder]) => folder !== currentFolder)
+  if (candidates.length === 0) return []
+
+  const victims = new Set<string>()
+  if (retentionDays !== undefined) {
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
+    for (const [folder, entry] of candidates) {
+      if (entry.date && Date.parse(entry.date) < cutoff) victims.add(folder)
+    }
+  }
+  if (maxSessions !== undefined) {
+    // Count the current session toward the limit but never delete it.
+    const sorted = [...allEntries].sort((a, b) => (a[1].date || "").localeCompare(b[1].date || ""))
+    const excess = sorted.slice(0, Math.max(0, sorted.length - maxSessions))
+    for (const [folder] of excess) if (folder !== currentFolder) victims.add(folder)
+  }
+  if (victims.size === 0) return []
+
+  for (const folder of victims) {
+    await rm(path.join(root, folder), { recursive: true, force: true })
+  }
+
+  const removedSessionIDs = new Set<string>()
+  const removedSeenIDs = new Set<string>()
+  const nextIndex: Record<string, IndexEntry> = {}
+  for (const [folder, entry] of Object.entries(index)) {
+    if (victims.has(folder)) {
+      if (entry.sessionID) removedSessionIDs.add(entry.sessionID)
+      for (const id of entry.seenIDs ?? []) removedSeenIDs.add(id)
+    } else {
+      nextIndex[folder] = entry
+    }
+  }
+  await ctx.storage.set(INDEX_KEY, JSON.stringify(nextIndex))
+
+  const flags = await getSessionFlags(ctx)
+  for (const id of removedSessionIDs) delete flags[id]
+  await ctx.storage.set(FLAGS_KEY, JSON.stringify(flags))
+
+  const folderMap = await getFolderMap(ctx)
+  for (const id of removedSessionIDs) delete folderMap[id]
+  await ctx.storage.set(FOLDERS_KEY, JSON.stringify(folderMap))
+
+  const last = await getLastInteractions(ctx)
+  for (const id of removedSessionIDs) delete last[id]
+  await ctx.storage.set(LAST_KEY, JSON.stringify(last))
+
+  const transcripts = await getTranscripts(ctx)
+  for (const folder of victims) delete transcripts[folder]
+  await ctx.storage.set(TRANSCRIPT_KEY, JSON.stringify(transcripts))
+
+  const entries = await getExportEntries(ctx)
+  const kept = entries.filter((entry) => {
+    const prefix = removedSessionIDs.size ? [...removedSessionIDs].some((id) => entry.interactionID.startsWith(`${id}::`)) : false
+    return !prefix
+  })
+  await ctx.storage.set(EXPORT_KEY, JSON.stringify(kept))
+
+  if (removedSeenIDs.size > 0) {
+    await setSeen(
+      ctx,
+      (await getSeen(ctx)).filter((id) => !removedSeenIDs.has(id)),
+    )
+  }
+
+  return [...victims]
 }
 
 /** Write a numbered Markdown file exclusively; bump the number on collision. */

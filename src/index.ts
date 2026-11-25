@@ -45,6 +45,7 @@ import {
   getSessionFlags,
   getTranscripts,
   highestNumber,
+  pruneOldSessions,
   readDirNames,
   readGitMetadata,
   setFolderMap,
@@ -346,6 +347,8 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
       date,
       files: written,
       branch: git.branch,
+      sessionID,
+      seenIDs: fresh.map((message) => message.id),
     })
     await writeArchiveFile(root, "INDEX.md", renderIndex(await getIndex(ctx)))
   }
@@ -367,6 +370,15 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
     }
   }
   await regenerateExport(ctx, root, options)
+
+  if (!options.dryRun && (options.retentionDays !== undefined || options.maxSessions !== undefined)) {
+    const removed = await pruneOldSessions(ctx, root, folder.name, options.retentionDays, options.maxSessions)
+    if (removed.length > 0) {
+      console.warn(`[prompt-archive] pruned ${removed.length} old session(s): ${removed.join(", ")}`)
+      await writeArchiveFile(root, "INDEX.md", renderIndex(await getIndex(ctx)))
+      await regenerateExport(ctx, root, options)
+    }
+  }
 }
 
 /** First prompt timestamp, falling back to the current time. */

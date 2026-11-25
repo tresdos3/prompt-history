@@ -26,6 +26,8 @@ test("options accept valid overrides", () => {
     resultTemplate: "{{agent}}: {{body}}",
     includeTranscript: false,
     transcriptName: "TALK.md",
+    retentionDays: 7,
+    maxSessions: 10,
   })
   assert.equal(parsed.directory, "/tmp/archive")
   assert.equal(parsed.includeReasoning, true)
@@ -44,6 +46,8 @@ test("options accept valid overrides", () => {
   assert.equal(parsed.resultTemplate, "{{agent}}: {{body}}")
   assert.equal(parsed.includeTranscript, false)
   assert.equal(parsed.transcriptName, "TALK.md")
+  assert.equal(parsed.retentionDays, 7)
+  assert.equal(parsed.maxSessions, 10)
 })
 
 test("invalid options fall back to defaults", () => {

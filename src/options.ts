@@ -46,6 +46,10 @@ export interface ArchiveOptions {
   includeTranscript: boolean
   /** Override the transcript filename. */
   transcriptName: string
+  /** Delete session folders older than this many days. */
+  retentionDays?: number
+  /** Keep at most this many session folders, deleting the oldest first. */
+  maxSessions?: number
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -132,6 +136,15 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     options.maxParentDepth = Math.max(0, Math.trunc(input.maxParentDepth))
   } else if (input.maxParentDepth !== undefined) {
     warnings.push("maxParentDepth must be a finite number")
+  }
+
+  for (const key of ["retentionDays", "maxSessions"] as const) {
+    const value = input[key]
+    if (typeof value === "number" && Number.isFinite(value)) {
+      options[key] = Math.max(0, Math.trunc(value))
+    } else if (value !== undefined) {
+      warnings.push(`${key} must be a finite number`)
+    }
   }
 
   for (const key of ["includeTranscript"] as const) {
