@@ -42,6 +42,7 @@ import {
   getSessionFlags,
   highestNumber,
   readDirNames,
+  readGitMetadata,
   setFolderMap,
   setIndexEntry,
   setLastInteractions,
@@ -182,6 +183,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
     await clearSessionFlag(ctx, sessionID, "permissionRejected")
   }
   const securityWarning = flags.securityWarning === true
+  const git = await readGitMetadata(ctx.location.directory)
   const interactions = groupInteractions(fresh)
   const lastInteractions = await getLastInteractions(ctx)
   const lastUser = [...messages].reverse().find((m) => m.type === "user")
@@ -234,6 +236,8 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
           includeChangedFiles: options.includeChangedFiles,
           maxChangedFiles: options.maxChangedFiles,
           maxTextChars: options.maxTextChars,
+          gitBranch: git.branch,
+          gitCommit: git.commit,
           securityWarning,
         }),
       )
@@ -298,6 +302,8 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
         includeChangedFiles: options.includeChangedFiles,
         maxChangedFiles: options.maxChangedFiles,
         maxTextChars: options.maxTextChars,
+        gitBranch: git.branch,
+        gitCommit: git.commit,
         securityWarning,
       }),
     )
@@ -332,6 +338,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
       title: folder.name.replace(/^(?:\d{4}-\d{2}-\d{2}-)?\d{4}-/, ""),
       date,
       files: written,
+      branch: git.branch,
     })
     await writeArchiveFile(root, "INDEX.md", renderIndex(await getIndex(ctx)))
   }

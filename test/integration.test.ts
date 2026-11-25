@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import test from "node:test"
 import { processSession } from "../src/index.ts"
@@ -11,12 +11,14 @@ const TEMP_ROOT = "/private/var/folders/cv/z4kr2kj95jgb41tjvgrpy10w0000gp/T/open
 interface FakeCtxOptions {
   messages: HistoryMessage[]
   session?: Record<string, unknown>
+  location?: string
 }
 
 /** Fake OpenCode context backed by in-memory storage and session data. */
-function fakeCtx({ messages, session = {} }: FakeCtxOptions) {
+function fakeCtx({ messages, session = {}, location = TEMP_ROOT }: FakeCtxOptions) {
   const data = new Map<string, unknown>()
   const ctx = {
+    location: { directory: location },
     storage: {
       async get(key: string) {
         return data.get(key)
@@ -84,6 +86,32 @@ test("a second event for the same session does not duplicate recorded messages",
     assert.equal(folders.length, 1)
     const files = await readdir(path.join(base, folders[0]))
     assert.equal(files.length, 2)
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("git metadata reaches frontmatter and INDEX.md", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-integration-"))
+  try {
+    const dir = path.join(base, ".git")
+    await mkdir(dir)
+    await writeFile(path.join(dir, "HEAD"), "ref: refs/heads/feature/login\n")
+    await mkdir(path.join(dir, "refs/heads/feature"), { recursive: true })
+    await writeFile(path.join(dir, "refs/heads/feature/login"), "abc123".padEnd(40, "0"))
+    const { ctx } = fakeCtx({
+      location: base,
+      messages: [msg("msg_1", { text: "Add login form" })],
+    })
+    await processSession(ctx, DEFAULT_OPTIONS, path.join(base, "archive"), "ses_1", "succeeded")
+    const folders = await sessionFolders(path.join(base, "archive"))
+    const resultFile = (await readdir(path.join(base, "archive", folders[0]))).find((f) => f.endsWith("-result.md"))
+    assert.ok(resultFile)
+    const result = await readFile(path.join(base, "archive", folders[0], resultFile), "utf8")
+    assert.match(result, /git_branch: "feature\/login"/)
+    assert.match(result, /git_commit: "abc1230000/)
+    const index = await readFile(path.join(base, "archive", "INDEX.md"), "utf8")
+    assert.match(index, /Branch: `feature\/login`/)
   } finally {
     await rm(base, { recursive: true, force: true })
   }

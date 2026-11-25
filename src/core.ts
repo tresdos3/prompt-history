@@ -269,6 +269,8 @@ export interface ResultFileInput {
   includeChangedFiles?: boolean
   maxChangedFiles?: number
   maxTextChars?: number
+  gitBranch?: string
+  gitCommit?: string
   /** True when a credential-related permission was flagged in this session. */
   securityWarning?: boolean
 }
@@ -293,6 +295,8 @@ export function renderResultFile(input: ResultFileInput): string {
     ["outcome", input.outcome],
     ["changed_files", files],
   ]
+  if (input.gitBranch) fields.push(["git_branch", input.gitBranch])
+  if (input.gitCommit) fields.push(["git_commit", input.gitCommit])
   if (input.securityWarning) fields.push(["security_warning", "true"])
   const body = [`# Result — ${input.agent}`, "", text || "_No assistant response was recorded for this interaction._"]
   if (reasoning) body.push("", "## Reasoning", "", reasoning)
@@ -380,7 +384,9 @@ export function renderExport(entries: ReadonlyArray<ExportEntry>, format: "md" |
 }
 
 /** Render the archive root INDEX.md from persisted session entries. */
-export function renderIndex(entries: Readonly<Record<string, { title: string; date: string; files: ReadonlyArray<string> }>>): string {
+export function renderIndex(
+  entries: Readonly<Record<string, { title: string; date: string; files: ReadonlyArray<string>; branch?: string }>>,
+): string {
   const lines = ["# Prompt archive index", ""]
   const folders = Object.keys(entries).sort()
   if (folders.length === 0) lines.push("_No sessions recorded yet._")
@@ -388,6 +394,7 @@ export function renderIndex(entries: Readonly<Record<string, { title: string; da
     const entry = entries[folder]
     lines.push(`## ${entry.title || folder}`, "")
     if (entry.date) lines.push(`- Date: ${entry.date}`)
+    if (entry.branch) lines.push(`- Branch: \`${entry.branch}\``)
     lines.push(`- Folder: [${folder}](./${folder}/)`)
     for (const file of entry.files) {
       lines.push(`- [${file}](./${folder}/${file})`)

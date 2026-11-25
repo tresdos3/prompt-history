@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import test from "node:test"
 import {
@@ -7,6 +7,7 @@ import {
   clearSessionFlag,
   createSessionFolder,
   getIndex,
+  readGitMetadata,
   setIndexEntry,
   writeArchiveFile,
   getSessionFlags,
@@ -129,6 +130,36 @@ test("index entries merge files and writeArchiveFile regenerates content", async
     await writeArchiveFile(base, "INDEX.md", "v1\n")
     await writeArchiveFile(base, "INDEX.md", "v2\n")
     assert.equal(await readFile(path.join(base, "INDEX.md"), "utf8"), "v2\n")
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+const FAKE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+
+test("git metadata is read from HEAD and loose refs", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-git-"))
+  try {
+    const dir = path.join(base, ".git")
+    await mkdir(dir)
+    await writeFile(path.join(dir, "HEAD"), "ref: refs/heads/feature/dev\n")
+    await mkdir(path.join(dir, "refs/heads/feature"), { recursive: true })
+    await writeFile(path.join(dir, "refs/heads/feature/dev"), `${FAKE_SHA}\n`)
+    assert.deepEqual(await readGitMetadata(base), { branch: "feature/dev", commit: FAKE_SHA })
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("git metadata falls back to packed-refs and returns empty without .git", async () => {
+  const base = await mkdtemp(path.join(TEMP_ROOT, "prompt-archive-git-"))
+  try {
+    assert.deepEqual(await readGitMetadata(base), {})
+    const dir = path.join(base, ".git")
+    await mkdir(dir)
+    await writeFile(path.join(dir, "HEAD"), "ref: refs/heads/main\n")
+    await writeFile(path.join(dir, "packed-refs"), `# pack-refs with: peeled fully-peeled sorted\n${FAKE_SHA} refs/heads/main\n`)
+    assert.deepEqual(await readGitMetadata(base), { branch: "main", commit: FAKE_SHA })
   } finally {
     await rm(base, { recursive: true, force: true })
   }

@@ -5,7 +5,7 @@
  * overwritten. No child processes are spawned by this plugin.
  */
 
-import { appendFile, mkdir, open, readdir, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, open, readFile, readdir, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { Plugin } from "@opencode/plugin"
 import type { ExportEntry } from "./core.ts"
@@ -37,6 +37,67 @@ export interface IndexEntry {
   title: string
   date: string
   files: string[]
+  branch?: string
+}
+
+/** Local git metadata, read from .git files only — no shell or child processes. */
+export interface GitMetadata {
+  branch?: string
+  commit?: string
+}
+
+/** Resolve the git directory, which may be a file pointing elsewhere (worktrees). */
+async function gitDir(projectDirectory: string): Promise<string | undefined> {
+  const candidate = path.join(projectDirectory, ".git")
+  try {
+    const info = await stat(candidate)
+    if (info.isDirectory()) return candidate
+    if (info.isFile()) {
+      const content = await readFile(candidate, "utf8")
+      const match = /^gitdir:\s*(.+)$/m.exec(content)
+      if (match) return path.resolve(projectDirectory, match[1].trim())
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+/** Read the current branch and commit hash from .git/HEAD, refs, and packed-refs. */
+export async function readGitMetadata(projectDirectory: string): Promise<GitMetadata> {
+  const dir = await gitDir(projectDirectory)
+  if (!dir) return {}
+  let head: string
+  try {
+    head = (await readFile(path.join(dir, "HEAD"), "utf8")).trim()
+  } catch {
+    return {}
+  }
+  const result: GitMetadata = {}
+  const refMatch = /^ref:\s*(.+)$/.exec(head)
+  if (!refMatch) {
+    // Detached HEAD: the file contains the commit hash directly.
+    if (/^[0-9a-f]{40}$/i.test(head)) result.commit = head
+    return result
+  }
+  const ref = refMatch[1]
+  result.branch = ref.replace(/^refs\/heads\//, "")
+  try {
+    const commit = (await readFile(path.join(dir, ref), "utf8")).trim()
+    if (/^[0-9a-f]{40}$/i.test(commit)) result.commit = commit
+    return result
+  } catch {
+    // Fall through to packed-refs.
+  }
+  try {
+    const packed = await readFile(path.join(dir, "packed-refs"), "utf8")
+    const line = packed.split("\n").find((row) => row.endsWith(` ${ref}`))
+    const commit = line?.split(" ")[0]
+    if (commit && /^[0-9a-f]{40}$/i.test(commit)) result.commit = commit
+  } catch {
+    // No packed refs; branch without commit is still useful.
+  }
+  return result
 }
 
 export async function getIndex(ctx: Ctx): Promise<Record<string, IndexEntry>> {
@@ -64,6 +125,7 @@ export async function getIndex(ctx: Ctx): Promise<Record<string, IndexEntry>> {
         title: record.title,
         date: record.date,
         files: record.files as string[],
+        ...(typeof record.branch === "string" ? { branch: record.branch } : {}),
       }
     }
   }
@@ -108,6 +170,7 @@ export async function setIndexEntry(ctx: Ctx, folder: string, entry: IndexEntry)
     title: entry.title || previous?.title || folder,
     date: entry.date || previous?.date || "",
     files: [...new Set([...(previous?.files ?? []), ...entry.files])],
+    ...(entry.branch || previous?.branch ? { branch: entry.branch || previous?.branch } : {}),
   }
   await ctx.storage.set(INDEX_KEY, JSON.stringify(all))
 }

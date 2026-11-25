@@ -215,6 +215,36 @@ test("a rejected permission marks an otherwise successful turn as failed", () =>
   })
 })
 
+test("result frontmatter records git branch and commit when available", () => {
+  const rendered = renderResultFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    promptFile: "01-prompt.md",
+    timestamp: 1,
+    status: "complete",
+    outcome: "succeeded",
+    responses: [],
+    gitBranch: "feature/login",
+    gitCommit: "abc123",
+  })
+  assert.match(rendered, /git_branch: "feature\/login"/)
+  assert.match(rendered, /git_commit: "abc123"/)
+  const plain = renderResultFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    promptFile: "01-prompt.md",
+    timestamp: 1,
+    status: "complete",
+    outcome: "succeeded",
+    responses: [],
+  })
+  assert.doesNotMatch(plain, /git_branch/)
+})
+
 test("result files carry a security warning flag when requested", () => {
   const base = {
     interactionID: "ses::msg",

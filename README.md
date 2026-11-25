@@ -6,7 +6,7 @@
 An [OpenCode](https://opencode.ai/) plugin that automatically saves prompts and complete assistant responses as Markdown, so you keep a searchable record of every development session without copying anything by hand.
 
 - Captures user prompts and full assistant responses.
-- Records session ID, agent, timestamps, outcome, tools used, and changed files.
+- Records session ID, agent, timestamps, outcome, tools used, changed files, and local git branch/commit.
 - Links each prompt and its response with a shared `interaction` ID.
 - Organizes records into dynamically named session folders.
 - **Never overwrites** existing files.
@@ -72,6 +72,7 @@ docs/prompt-history/
 - Folder names are `NNNN-<session-title>`, numbered in order.
 - File names are `NN-<prompt-slug>-prompt.md` and `NN-<agent>-result.md`.
 - Subagent sessions share the root session's folder.
+- Result frontmatter includes `git_branch` / `git_commit` when a local `.git` directory is found; `INDEX.md` shows the branch per session.
 - Prompt and result files share the same `interaction` frontmatter value:
   `"<sessionID>::<userMessageID>"`.
 
@@ -88,6 +89,8 @@ agent: "build"
 timestamp: "2026-11-25T12:00:00.000Z"
 status: "complete"
 title: "add-login"
+git_branch: "feature/login"
+git_commit: "abc123..."
 ---
 
 # Prompt — add-login
