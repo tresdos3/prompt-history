@@ -38,6 +38,10 @@ export interface ArchiveOptions {
   dryRun: boolean
   /** When set, regenerate a consolidated export after each session. */
   export?: ExportOptions
+  /** Optional custom Markdown body template for prompt files. */
+  promptTemplate?: string
+  /** Optional custom Markdown body template for result files. */
+  resultTemplate?: string
 }
 
 export const DEFAULT_OPTIONS: ArchiveOptions = {
@@ -122,6 +126,11 @@ export function parseOptions(raw: unknown): ArchiveOptions {
     options.maxParentDepth = Math.max(0, Math.trunc(input.maxParentDepth))
   } else if (input.maxParentDepth !== undefined) {
     warnings.push("maxParentDepth must be a finite number")
+  }
+
+  for (const key of ["promptTemplate", "resultTemplate"] as const) {
+    if (typeof input[key] === "string") options[key] = input[key]
+    else if (input[key] !== undefined) warnings.push(`${key} must be a string`)
   }
 
   const exportOptions = parseExportOptions(input.export, warnings)

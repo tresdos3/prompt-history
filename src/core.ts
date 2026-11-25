@@ -106,6 +106,11 @@ export function toIso(ms: number): string {
   return Number.isFinite(date.getTime()) ? date.toISOString() : new Date(0).toISOString()
 }
 
+/** Replace `{{key}}` placeholders with values; unknown placeholders become empty. */
+export function applyTemplate(template: string, values: Readonly<Record<string, string>>): string {
+  return template.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_match, key: string) => values[key] ?? "")
+}
+
 /** Cap body length with a visible marker instead of writing unbounded files. */
 export function truncateText(value: string, maxChars: number): string {
   const max = Math.max(0, Math.trunc(maxChars))
@@ -236,6 +241,7 @@ export interface PromptFileInput {
   text: string
   status: InteractionStatus
   maxTextChars?: number
+  template?: string
 }
 
 export function renderPromptFile(input: PromptFileInput): string {
@@ -251,7 +257,18 @@ export function renderPromptFile(input: PromptFileInput): string {
     ["title", input.title],
   ]
   const body = truncateText(redactSecrets(input.text), input.maxTextChars ?? 100_000)
-  return `${frontmatter(fields)}\n# Prompt — ${input.title}\n\n${body}\n`
+  const content = input.template
+    ? applyTemplate(input.template, {
+        body,
+        timestamp: toIso(input.timestamp),
+        agent: input.agent,
+        session_id: input.sessionID,
+        interaction: input.interactionID,
+        status: input.status,
+        title: input.title,
+      })
+    : `# Prompt — ${input.title}\n\n${body}`
+  return `${frontmatter(fields)}\n${redactSecrets(content)}\n`
 }
 
 export interface ResultFileInput {
@@ -269,6 +286,7 @@ export interface ResultFileInput {
   includeChangedFiles?: boolean
   maxChangedFiles?: number
   maxTextChars?: number
+  template?: string
   gitBranch?: string
   gitCommit?: string
   /** True when a credential-related permission was flagged in this session. */
@@ -302,7 +320,23 @@ export function renderResultFile(input: ResultFileInput): string {
   if (reasoning) body.push("", "## Reasoning", "", reasoning)
   if (tools.length) body.push("", "## Tools used", "", ...tools.map((t) => `- ${t}`))
   if (files.length) body.push("", "## Changed files", "", ...files.map((f) => `- ${f}`))
-  return `${frontmatter(fields)}\n${body.join("\n")}\n`
+  const content = input.template
+    ? applyTemplate(input.template, {
+        body: body.join("\n"),
+        timestamp: toIso(input.timestamp),
+        agent: input.agent,
+        session_id: input.sessionID,
+        interaction: input.interactionID,
+        status: input.status,
+        outcome: input.outcome,
+        prompt_file: input.promptFile,
+        git_branch: input.gitBranch ?? "",
+        git_commit: input.gitCommit ?? "",
+        tools: tools.join(", "),
+        changed_files: files.join(", "),
+      })
+    : body.join("\n")
+  return `${frontmatter(fields)}\n${redactSecrets(content)}\n`
 }
 
 /** One archived interaction, stored for consolidated export. */

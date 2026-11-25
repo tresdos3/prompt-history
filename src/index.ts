@@ -236,6 +236,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
           includeChangedFiles: options.includeChangedFiles,
           maxChangedFiles: options.maxChangedFiles,
           maxTextChars: options.maxTextChars,
+          template: options.resultTemplate,
           gitBranch: git.branch,
           gitCommit: git.commit,
           securityWarning,
@@ -278,6 +279,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
         text: interaction.prompt.text ?? "",
         status,
         maxTextChars: options.maxTextChars,
+        template: options.promptTemplate,
       }),
     )
     written.push(promptFile)
@@ -302,6 +304,7 @@ export async function processSession(ctx: Ctx, options: ArchiveOptions, root: st
         includeChangedFiles: options.includeChangedFiles,
         maxChangedFiles: options.maxChangedFiles,
         maxTextChars: options.maxTextChars,
+        template: options.resultTemplate,
         gitBranch: git.branch,
         gitCommit: git.commit,
         securityWarning,

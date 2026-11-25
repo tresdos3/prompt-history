@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import {
+  applyTemplate,
   changedFiles,
   classifyCredentialPermission,
   collectNewMessages,
@@ -213,6 +214,38 @@ test("a rejected permission marks an otherwise successful turn as failed", () =>
     status: "complete",
     outcome: "succeeded",
   })
+})
+
+test("templates substitute placeholders and redact the final body", () => {
+  assert.equal(applyTemplate("Hi {{ name }} / {{missing}}", { name: "World" }), "Hi World / ")
+  const prompt = renderPromptFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    title: "demo",
+    timestamp: 1,
+    text: "TOKEN=sk-fake1234567890",
+    status: "complete",
+    template: "# {{title}} by {{agent}}\n\n{{body}}",
+  })
+  assert.match(prompt, /# demo by build/)
+  assert.match(prompt, /\[REDACTED\]/)
+  assert.doesNotMatch(prompt, /sk-fake1234567890/)
+  const result = renderResultFile({
+    interactionID: "ses::msg",
+    sessionID: "ses",
+    rootSessionID: "ses",
+    agent: "build",
+    promptFile: "01-demo-prompt.md",
+    timestamp: 1,
+    status: "complete",
+    outcome: "succeeded",
+    responses: [message({ id: "m2", type: "assistant", content: [{ type: "text", text: "Done." }] })],
+    template: "{{agent}}: {{outcome}} — {{body}}",
+  })
+  assert.match(result, /build: succeeded/)
+  assert.match(result, /Done\./)
 })
 
 test("result frontmatter records git branch and commit when available", () => {

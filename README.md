@@ -128,7 +128,9 @@ Pass options in `opencode.json(c)`:
           "agent": "build",
           "status": "complete",
           "text": "login"
-        }
+        },
+        "promptTemplate": "# {{title}}\n\n{{body}}",
+        "resultTemplate": "{{agent}} — {{outcome}}\n\n{{body}}"
       }
     }
   ]
@@ -150,6 +152,12 @@ Pass options in `opencode.json(c)`:
 | `maxParentDepth` | number | `32` | Maximum `parentID` hops when resolving a subagent's root session. |
 | `dryRun` | boolean | `false` | Log the files that would be written without creating or modifying anything. |
 | `export` | object | unset | Generate a consolidated, searchable export file. See below. |
+| `promptTemplate` | string | unset | Custom Markdown body for prompt files. See below. |
+| `resultTemplate` | string | unset | Custom Markdown body for result files. See below. |
+
+### Custom templates
+
+`promptTemplate` and `resultTemplate` replace the Markdown body (frontmatter is always generated). Placeholders: `{{body}}`, `{{timestamp}}`, `{{agent}}`, `{{session_id}}`, `{{interaction}}`, `{{status}}`, `{{title}}` (prompt); plus `{{outcome}}`, `{{prompt_file}}`, `{{tools}}`, `{{changed_files}}`, `{{git_branch}}`, `{{git_commit}}` (result). Unknown placeholders become empty strings. Redaction is applied to the final rendered body.
 
 ### Consolidated export
 
